@@ -1,0 +1,11 @@
+{
+  "docker_binary": "docker",
+  "cpus": 2,
+  "memory": "4g",
+  "pids_limit": 128,
+  "workdir": "/testbed",
+  "command_timeout_seconds": 30,
+  "control_timeout_seconds": 30,
+  "kill_grace_seconds": 5,
+  "output_bytes": 1048576
+}

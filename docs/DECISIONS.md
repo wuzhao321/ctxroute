@@ -52,3 +52,11 @@
 官方 schema 要求 prompt_cache_hit_tokens / prompt_cache_miss_tokens，二者之和须匹配 prompt_tokens。没有 usage 时保留预留，不补零。无法确定峰谷时段时报告价格区间，不把上界写成实际账单。相关来源见 docs/API_SETUP.md。
 
 低成本云环境还未确定；已记录 Modal 官方 harness 候选与 Sandbox 实际费率区别，以及传统主机关机仍计费的约束，见 docs/CLOUD_PLAN.md。没有建立资源、安装系统软件或访问密钥内容。
+
+## 当前用户范围覆盖：优先实现，暂停实验和搭建
+
+用户明确要求先完成架构与实验代码，随后要求减少测试和验证、重点实现功能。本轮不再依赖云服务器、密钥或 Docker 问题，不进行真实评测、API 冒烟或 SDK 环境安装。此前“每阶段等待继续”不阻止完成本轮代码工作。
+
+已编写 A1–A5、结构化压缩、规则路由、MCP/Docker 边界、预算网关、运行清单/任务级续跑、消融配置、预测/判分导入和配对分析。核心使用 dataclass；PydanticAI 和 MCP 采用延迟加载适配器。JSONL/CSV 为默认产物，暂不引入 DuckDB/Parquet 的运行时依赖。
+
+A0 仅实现原版证据导入与配置，原版付费执行接入及 A0/A1 一致性仍待完成。A6/A7、学习路由、本地模型保持后置。所有真实效果指标未测。详细边界以 ARCHITECTURE.md 与 IMPLEMENTATION_STATUS.md 为准；早先 P0 文档描述的是历史状态。

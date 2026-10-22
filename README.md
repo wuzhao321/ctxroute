@@ -1,38 +1,51 @@
 # ctxroute
 
-研究结构化上下文压缩与步骤级模型路由对软件工程 Agent 成功率、含缓存成本和延迟的影响。
+面向软件工程 Agent 的结构化上下文压缩与步骤级模型路由实验框架。
 
-当前状态：P0 本地准备通过；已有成本核算、预算 ledger、数据隔离与冻结划分，尚无 Agent 实验结果。预算最多 10 USD（含 API 和云），3 天；8 USD 暂停。正式 test 暂缓，仅在资源允许时执行固定 dev pilot。
+当前已编写 A1–A5 核心循环、压缩与路由、沙箱/MCP 适配、预算和 trace，以及批量调度、消融和统计分析代码。按用户最新要求，**暂停环境搭建与全部真实评测**；付费执行仍关闭，没有实验效果数据。
 
-## 本地运行
+架构与实现边界见 [ARCHITECTURE](docs/ARCHITECTURE.md)，功能状态见 [IMPLEMENTATION_STATUS](docs/IMPLEMENTATION_STATUS.md)。预算保持 API 与云资源合计最多 10 USD，8 USD 暂停，不训练模型。
 
-当前机器已配置项目目录内 uv 和 Python 3.12 虚拟环境：
+## 离线准备命令
+
+使用已有项目 Python 环境，不需要密钥、Docker 或网络：
 
 ```sh
-sh scripts/check.sh
-UV_CACHE_DIR=.cache/uv .tools/uv-package/bin/uv run --frozen --offline ctxroute status
+.venv/bin/ctxroute status
+.venv/bin/ctxroute experiment plan --arms A1 A2 A3 A4 --count 5 --output results/plans/main.json
+.venv/bin/ctxroute experiment plan --arms A2 A4 --count 5 --truncate --output results/plans/truncate.json
 ```
 
-质量门执行 ruff、pyright 和 pytest，不调用 API 或读取密钥。status 只显示配置，不代表供应商余额或账单。
+清单只写入固定任务 ID、参数和哈希，不加载题目、不执行任务，也不授权付费。输出文件不可覆盖。改变参数后需要新清单。当前 pilot 的数量和 seed 限制沿用预注册；test 暂不开放。
 
-新机器需要 Python 3.12、uv 和 Node（供 pyright 使用），然后 `uv sync --frozen`，再运行检查。自定义 uv 路径使用 CTXROUTE_UV。当前脚本在无独立 Node 时可使用 Codex bundled Node，其他机器需自行提供。
+## 已编写的后续执行入口
 
-## 数据与证据
+以下用于说明代码接口，当前配置下不会执行。这些不是本轮操作要求。
 
-- [预注册](docs/PREREG.md)：固定 pilot 候选、预算及统计规则，不授权正式 test。
-- [冻结划分](data/split.json)：官方 upstream test 300 个 ID 分成 dev 60 / test 240，不向 Agent 提供答案字段。
-- [决策记录](docs/DECISIONS.md)、[环境记录](docs/ENV.lock.md)、[P0 验收](docs/P0_STATUS.md)。
-- [Claims Ledger](docs/CLAIMS.md)：实验效果全部未测。
-- [本地检查日志](results/validation/p0/checks.log)。
+```sh
+# tasks.jsonl 必须是去除答案字段后的四字段输入；images.json 映射 instance_id 到镜像摘要。
+.venv/bin/ctxroute experiment run --plan results/plans/main.json --tasks data/private/tasks.jsonl --images configs/private/images.json --execute
 
-重建脚本 scripts/freeze_split.py 只读取 instance_id 列，拒绝覆盖冻结文件；源 revision、哈希和 seed 在 split.json。仅在独立新工作目录重建，需要 `uv sync --frozen --group data`。
+# 每次导出只含一个 arm、variant、seed。
+.venv/bin/ctxroute experiment export --runs results/runs/RUN_ID --output results/predictions.jsonl
+.venv/bin/ctxroute experiment harness-command --plan results/plans/main.json --predictions results/predictions.jsonl --run-id GRADING_RUN_ID
 
-## 密钥与付费
+# harness-command 只打印 argv，官方 harness 须在独立判分环境执行。
+.venv/bin/ctxroute experiment import-grade --run results/runs/RUN_ID --report PATH_TO_OFFICIAL_REPORT
+.venv/bin/ctxroute experiment analyze --runs results/runs/RUN_ID --output results/analysis/report
+```
 
-密钥设置与单次 API 探针见 [API_SETUP](docs/API_SETUP.md)。运行 `.venv/bin/python scripts/setup_key.py` 可隐藏输入并以权限 600 保存；不要发送到聊天。.env 已被忽略。用 `.venv/bin/ctxroute api-probe` 查看离线计划。
+`run` 支持任务级续跑；中断任务不会自动重新付费。`analyze` 生成 runs.jsonl、runs.csv、analysis.json、failure_review.csv 和 REPORT.md；配对比较需要多个臂和相同实例/seed 的有效证据。费用为含缓存的 usage 成本上界，真实账单另行对账。合成运行不会进入正式分析或预测导出。
 
-预算使用 Decimal 和 SQLite 事务，未知费用保持预留，超过预留时记录并锁停。已接入固定连通探针，尚无通用 Agent 或云适配器；paid_execution_enabled 保持 false。详见 [API 准备验收](docs/P0_API_STATUS.md) 和 [云端候选](docs/CLOUD_PLAN.md)。
+A0 独立证据入口为 `experiment import-baseline --source DIR --run-id ID`，原版执行接入仍待完成；A6/A7、学习路由、本地模型按计划后置。可选 `experiment plot --analysis DIR --output FIGURE.png` 使用 matplotlib，本轮未安装或运行。
 
-## 项目约定
+## 代码与证据
 
-见 [AGENTS.md](AGENTS.md)。四个项目 skills 在 .agents/skills/。本机 M5 仅开发，正式评测需 x86_64 环境。当前没有 benchmark 一键复现入口，不得用离线测试通过代替 harness 判分。
+- [预注册](docs/PREREG.md)、[冻结划分](data/split.json)：dev/test 分离与固定 pilot 顺序。
+- [决策记录](docs/DECISIONS.md)：用户范围调整、实现偏差与历史记录。
+- [Claims Ledger](docs/CLAIMS.md)：效果指标继续标记未测。
+- `configs/arms/`：A0–A7 定义；`configs/ablations/`：A2/A4 截断消融。
+- `src/ctxroute/`：完整模块划分见架构文档。
+- `tests/`：已有离线测试。本轮不扩展验证矩阵、不运行模拟实验。
+
+需要检查代码时可运行 `sh scripts/check.sh`，不会调用模型或 Docker。当前真实 SDK 依赖未安装；不得把离线检查通过视为真实环境联调成功。既有密钥说明见 [API_SETUP](docs/API_SETUP.md)，本阶段无需配置。

@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import sys
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -12,11 +13,36 @@ from ctxroute.tracing.budget import BudgetStopped
 
 
 def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] == "experiment":
+        from ctxroute.evalkit.cli import main as experiments
+
+        experiments(sys.argv[2:])
+        return
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["status", "key-status", "api-probe"])
+    parser.add_argument("command", choices=["status", "key-status", "api-probe", "demo"])
     parser.add_argument("--config", type=Path, default=Path("configs/budget.json"))
     parser.add_argument("--execute", action="store_true", help="Dispatch one paid probe if enabled")
+    parser.add_argument("--arm", choices=["A1", "A2", "A3", "A4", "A5"], default="A4")
+    parser.add_argument("--output", type=Path, default=Path("artifacts/demos"))
     args = parser.parse_args()
+    if args.command == "demo":
+        from ctxroute.runtime import demo
+
+        result = demo(Path.cwd(), args.arm, args.output)
+        print(
+            json.dumps(
+                {
+                    "kind": "synthetic_demo",
+                    "run_id": result.state.run_id,
+                    "termination": result.state.termination,
+                    "steps": result.state.step,
+                    "output": str(args.output / result.state.run_id),
+                    "is_benchmark": False,
+                },
+                indent=2,
+            )
+        )
+        return
     if args.command == "key-status":
         try:
             load_key(Path.cwd())
@@ -45,7 +71,7 @@ def main() -> None:
                 "hard_limit_usd": str(Decimal(str(config["hard_limit"]))),
                 "pause_at_usd": str(Decimal(str(config["pause_at"]))),
                 "paid_execution_enabled": config["paid_execution_enabled"],
-                "status": "P0 local preparation; benchmark not run",
+                "status": "Core experiment code; live execution paused, benchmark not run",
                 "note": "Configuration only; not a statement of account balance or billed cost",
             },
             ensure_ascii=False,

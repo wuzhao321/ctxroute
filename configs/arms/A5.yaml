@@ -1,0 +1,30 @@
+{
+  "arm": "A5",
+  "engine": "ctxroute",
+  "context": {
+    "budget_tokens": 32000,
+    "recent_steps": 6,
+    "soft_ratio": 0.7,
+    "hard_ratio": 0.9,
+    "mode": "none"
+  },
+  "router": {
+    "enabled": false,
+    "default_tier": "cheap",
+    "clean_steps": 3,
+    "strong_lock_steps": 5,
+    "cheap_context_tokens": 16000
+  },
+  "limits": {
+    "max_steps": 50,
+    "wall_seconds": 600,
+    "command_seconds": 30,
+    "task_usd": "0.20",
+    "max_output_tokens": 4096,
+    "output_head_chars": 2000,
+    "output_tail_chars": 2000,
+    "artifact_bytes": 8388608,
+    "recall_chars": 4000,
+    "format_attempts": 2
+  }
+}

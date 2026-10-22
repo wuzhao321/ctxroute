@@ -69,6 +69,12 @@ class Ledger:
                 "(id TEXT PRIMARY KEY, kind TEXT NOT NULL, reserved TEXT NOT NULL, "
                 "actual TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, settled_at TEXT)"
             )
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(requests)")}
+            if "scope" not in columns:
+                conn.execute("ALTER TABLE requests ADD COLUMN scope TEXT")
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS scopes (id TEXT PRIMARY KEY, cap TEXT NOT NULL)"
+            )
 
     @contextmanager
     def _transaction(self) -> Generator[sqlite3.Connection, None, None]:
@@ -114,12 +120,22 @@ class Ledger:
             )
             conn.execute("UPDATE config SET blocked=1 WHERE id=1")
 
-    def reserve(self, request_id: str, upper_bound: Decimal, kind: Kind) -> None:
+    def reserve(
+        self,
+        request_id: str,
+        upper_bound: Decimal,
+        kind: Kind,
+        *,
+        scope: str | None = None,
+        scope_limit: Decimal | None = None,
+    ) -> None:
         amount = money(upper_bound)
         if not self.enabled:
             raise BudgetStopped("Paid execution is disabled")
         if not request_id or len(request_id) > 200 or kind not in KINDS or amount <= 0:
             raise ValueError("Require request ID, supported category and positive upper bound")
+        if (scope is None) != (scope_limit is None):
+            raise ValueError("Scope and limit must be supplied together")
         with self._transaction() as conn:
             if conn.execute("SELECT 1 FROM requests WHERE id=?", (request_id,)).fetchone():
                 raise BudgetStopped("Request ID already reserved; do not dispatch twice")
@@ -129,9 +145,26 @@ class Ledger:
                 raise BudgetStopped("Blocked ledger or hard limit exceeded")
             if projected >= self.pause_at:
                 raise BudgetStopped("80% pause threshold reached including reservations")
+            if scope is not None and scope_limit is not None:
+                limit = money(scope_limit)
+                conn.execute("INSERT OR IGNORE INTO scopes VALUES(?, ?)", (scope, str(limit)))
+                saved = conn.execute("SELECT cap FROM scopes WHERE id=?", (scope,)).fetchone()
+                if saved is None or money(saved[0]) != limit:
+                    raise ValueError("Task budget cannot change within a run")
+                consumed = sum(
+                    (
+                        money(actual if actual is not None else hold)
+                        for hold, actual in conn.execute(
+                            "SELECT reserved, actual FROM requests WHERE scope=?", (scope,)
+                        )
+                    ),
+                    Decimal(0),
+                )
+                if consumed + amount > limit:
+                    raise BudgetStopped("Task budget exceeded including unsettled requests")
             conn.execute(
-                "INSERT INTO requests(id, kind, reserved) VALUES(?, ?, ?)",
-                (request_id, kind, str(amount)),
+                "INSERT INTO requests(id, kind, reserved, scope) VALUES(?, ?, ?, ?)",
+                (request_id, kind, str(amount), scope),
             )
 
     def settle(self, request_id: str, actual: Decimal | None) -> None:
