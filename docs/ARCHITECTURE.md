@@ -49,13 +49,13 @@ flowchart TD
 
 A1 为强模型固定层；A2 加结构化摘要；A3 加规则路由；A4 同时开启两项；A5 固定廉价层。每臂独立配置位于 `configs/arms/`，核心循环相同。`configs/ablations/` 提供 A2/A4 仅截断变体，manifest 的 variant 区分 `main` 与 `truncate`。压缩臂的 recall 工具差异仍是实验混杂因素。
 
-A0 定义仍是原版 mini-swe-agent，其原生循环不由 ctxroute 替换。目前实现了配置、清单与独立结果导入，**尚未实现或验证原版 A0 的付费执行接入**；不能把自研 A1 当成 A0。A0/A1 一致性未验证。上游 DefaultAgent/Model/Environment 接口已参考官方源码，但没有安装上游包：[DefaultAgent](https://github.com/SWE-agent/mini-swe-agent/blob/main/src/minisweagent/agents/default.py)、[Protocols](https://github.com/SWE-agent/mini-swe-agent/blob/main/src/minisweagent/__init__.py)。
+A0 已通过 `baselines/mini.py` 接入统一运行入口，直接使用固定版本的原生 DefaultAgent、文本动作解析与观测格式化函数，以预算模型网关和现有沙箱替换 I/O。它保留原生文本基线，但不是未经配置改动的上游 CLI。提示、动作协议、输出截断与传输方式仍与 A1 有差异，主因果对照继续使用 A1。真实兼容性及 A0/A1 一致性未验证，详见 [A0_ADAPTER](A0_ADAPTER.md)。
 
 A6 多 Agent/A2A、A7 外部 harness、学习路由与本地模型按既有缩减决定后置。A6/A7 配置用于保留定义，执行器明确拒绝这些臂；没有以占位文件宣称实现协议。
 
 ## 运行与恢复语义
 
-计划写入 config、价格、划分及预注册哈希。执行前校验，参数变化必须建立新清单。当前仅允许固定 seed、dev 前 1–5 项；清单生成本身不代表授权执行。计划与实例的组合确定 run_id。
+计划写入 config、价格、划分及预注册哈希，并冻结源代码指纹；含 A0 时同时冻结上游策略。执行前校验，参数变化必须建立新清单。当前仅允许固定 seed、dev 前 1–5 项；清单生成本身不代表授权执行。计划与实例的组合确定 run_id。
 
 完整任务已落盘则续跑时跳过；进程中断但未完成的任务保留原目录与费用预留，停止并要求先对账，不自动重复付费。这是任务级续跑，不是容器中途状态恢复。成功、失败、空补丁和预算终止都保留证据。变更后的任务输入不得沿用原 run_id。
 
@@ -77,4 +77,4 @@ API usage 的高峰成本上界、确定非高峰时的结算与真实账单分�
 
 标准库 JSONL/CSV 为默认分析产物；Parquet、DuckDB 不在当前主线实现内。重复读取统计以重复只读命令作为代理，不能覆盖同一文件不同命令的所有重复读取。H1 输出按轨迹长度分组的观察性计数，不作因果拟合。
 
-没有采集 benchmark 结果，不给成功率、成本节省或真实性能数字。API、官方 harness、A0 原版执行、图形依赖与可选扩展的环境准备均留到用户恢复该阶段后处理。
+没有采集 benchmark 结果，不给成功率、成本节省或真实性能数字。API、官方 harness、A0 运行依赖、图形依赖与可选扩展的环境准备均留到用户恢复该阶段后处理。

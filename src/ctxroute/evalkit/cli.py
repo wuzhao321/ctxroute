@@ -22,7 +22,7 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     plan = commands.add_parser("plan", help="Write an offline frozen pilot schedule")
-    plan.add_argument("--arms", nargs="+", default=["A1", "A2", "A3", "A4"])
+    plan.add_argument("--arms", nargs="+", default=["A0", "A1", "A2", "A3", "A4"])
     plan.add_argument("--count", type=int, default=5)
     plan.add_argument("--truncate", action="store_true")
     plan.add_argument("--output", type=Path, required=True)

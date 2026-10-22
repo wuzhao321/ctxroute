@@ -60,3 +60,9 @@
 已编写 A1–A5、结构化压缩、规则路由、MCP/Docker 边界、预算网关、运行清单/任务级续跑、消融配置、预测/判分导入和配对分析。核心使用 dataclass；PydanticAI 和 MCP 采用延迟加载适配器。JSONL/CSV 为默认产物，暂不引入 DuckDB/Parquet 的运行时依赖。
 
 A0 仅实现原版证据导入与配置，原版付费执行接入及 A0/A1 一致性仍待完成。A6/A7、学习路由、本地模型保持后置。所有真实效果指标未测。详细边界以 ARCHITECTURE.md 与 IMPLEMENTATION_STATUS.md 为准；早先 P0 文档描述的是历史状态。
+
+## A0 执行适配增量
+
+用户继续授权代码实现，评测与环境搭建仍暂停。新增 MiniSweRunner，调用固定参考提交的原生 DefaultAgent、文本动作解析、观测模板及提交检测；模型与环境 I/O 接入既有预算和沙箱。保留 native-text profile，记录它与 A1 的提示、动作格式、截断和传输差异，不宣称 A0/A1 已等价。主优化比较仍使用 A1。
+
+参考版本 2.4.6 / commit 04d809ceab9df28f9adaed044884180159172930，关键源文件 blob SHA 固定在 configs/baselines/mini-swe-agent.json。没有安装该包、下载镜像或运行原生循环。计划开始冻结实现源代码指纹，代码改变后需生成新清单。详见 A0_ADAPTER.md。

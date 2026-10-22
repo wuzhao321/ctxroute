@@ -10,8 +10,9 @@ from typing import Any
 
 from ctxroute.config import ArmConfig
 from ctxroute.domain import Task
+from ctxroute.evalkit.provenance import code_fingerprint
 from ctxroute.evalkit.split import agent_input
-from ctxroute.orchestrator.engine import Engine
+from ctxroute.orchestrator.base import Runner
 from ctxroute.tracing.budget import BudgetStopped, Ledger
 from ctxroute.tracing.cost import money
 
@@ -53,6 +54,9 @@ def create_plan(
         frozen[filename] = digest(root / filename)
     runtime = json.loads((root / "configs/runtime.json").read_text())
     frozen[runtime["price_file"]] = digest(root / runtime["price_file"])
+    if "A0" in arms:
+        relative = "configs/baselines/mini-swe-agent.json"
+        frozen[relative] = digest(root / relative)
     for instance in split["dev"][:count]:
         for arm in arms:
             path = (
@@ -71,7 +75,8 @@ def create_plan(
                 }
             )
     body: dict[str, Any] = {
-        "schema": 1,
+        "schema": 2,
+        "source_tree_sha256": code_fingerprint(root),
         "split": "dev",
         "purpose": "pilot",
         "jobs": jobs,
@@ -91,6 +96,11 @@ def load_plan(root: Path, path: Path) -> dict[str, Any]:
     body = {key: value for key, value in plan.items() if key != "plan_id"}
     if canonical_hash(body)[:20] != plan["plan_id"]:
         raise ValueError("Plan contents were changed")
+    if plan.get("source_tree_sha256") != code_fingerprint(root):
+        raise ValueError("Experiment implementation changed; prepare a new plan")
+    if any(job["arm"] == "A0" for job in plan["jobs"]):
+        if "configs/baselines/mini-swe-agent.json" not in plan["frozen_files"]:
+            raise ValueError("A0 plan must freeze its upstream policy")
     for relative, expected in plan["frozen_files"].items():
         full = (root / relative).resolve()
         if not full.is_relative_to(root.resolve()) or digest(full) != expected:
@@ -129,7 +139,7 @@ def campaign_lock(root: Path) -> Generator[None]:
             fcntl.flock(handle, fcntl.LOCK_UN)
 
 
-EngineFactory = Callable[[dict[str, Any], Task, str], Engine]
+EngineFactory = Callable[[dict[str, Any], Task, str], Runner]
 
 
 def run_plan(
@@ -145,13 +155,26 @@ def run_plan(
     if not execute or runtime["execution_mode"] != "live" or not ledger.enabled:
         raise RuntimeError("Campaign execution disabled; only code preparation is authorized")
     plan = load_plan(root, plan_path)
-    if any(job["arm"] == "A0" for job in plan["jobs"]):
-        raise ValueError("A0 is an external baseline; use its isolated adapter and import evidence")
     tasks = load_tasks(tasks_path)
     if any(job["instance_id"] not in tasks for job in plan["jobs"]):
         raise ValueError("Missing a scheduled sanitized task")
     completed: list[dict[str, Any]] = []
     with campaign_lock(root):
+        before = ledger.snapshot()
+        print(
+            json.dumps(
+                {
+                    "plan_id": plan["plan_id"],
+                    "planned_task_allowance_usd": str(
+                        sum((money(job["task_usd"]) for job in plan["jobs"]), money("0"))
+                    ),
+                    "spent_usd": str(before.spent),
+                    "reserved_usd": str(before.reserved),
+                    "pause_at_usd": str(before.pause_at),
+                    "hard_limit_usd": str(before.hard_limit),
+                }
+            )
+        )
         for index, job in enumerate(plan["jobs"]):
             run_id = f"{plan['plan_id']}-{index:04d}"
             directory = root / "results/runs" / run_id

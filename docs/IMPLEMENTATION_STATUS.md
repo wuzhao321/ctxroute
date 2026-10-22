@@ -17,14 +17,18 @@
 | 配对 bootstrap、精确 McNemar、费用/延迟比值 | 已编写 |
 | 缓存、路由、错误、重复读取、H1 分组诊断 | 已编写；未分析真实数据 |
 | CSV/JSON/报告、30 个失败案例分类表、可选图 | 已编写；未产出实验报告或图 |
-| A0 mini-swe-agent | 配置及原版证据导入已编写；原版执行接入仍待完成 |
+| A0 mini-swe-agent | 原生文本循环执行适配、预算/沙箱接入及证据导入已编写；未真实联调 |
 | A0/A1 一致性 | 未验证 |
 | A6/A7、学习路由、本地模型 | 按既有计划后置 |
 | DuckDB/Parquet | 未接入，当前使用 JSONL/CSV |
 | 真实 API、Docker、harness、dev/test 评测 | 全部暂停，本轮未运行 |
 
-本轮必要检查：ruff 静态检查及格式检查通过；pyright 为 0 errors；现有离线单元测试 62 passed（0.18 秒）。日志位于 results/validation/core-code/。不再增加测试矩阵或模拟实验。离线测试包含替代模型和替代沙箱，不能用于推断实际 SDK、隔离或 benchmark 表现。
+上一轮核心实现检查：ruff 静态检查及格式检查通过；pyright 为 0 errors；现有离线单元测试 62 passed（0.18 秒）。日志位于 results/validation/core-code/。不再增加测试矩阵或模拟实验。离线测试包含替代模型和替代沙箱，不能用于推断实际 SDK、隔离或 benchmark 表现。
 
 无新增运行时依赖、无 API/云费用、无远端推送。检查工具复用了既有环境；uv 在检查时重新构建了当前项目的本地安装，没有下载新依赖。付费执行 false 与 offline_only 保持不变。
 
 详细架构、实验接口和偏差见 ARCHITECTURE.md 与 README.md。历史 P0 文档保留原状态，勿将其作为当前功能清单。
+
+后续增量：A0 已接入 Runner/批量运行；增加上游源文件核对、原生轨迹、控制变量记录与计划源代码指纹。适配边界详见 A0_ADAPTER.md。本次不新增测试矩阵，仅检查代码静态质量。
+
+A0 增量检查：ruff/格式检查与 pyright，通过后日志保存在 results/validation/a0-code/；本次未运行单元测试、模拟实验或真实联调。上文 62 项通过是上一轮记录，不作为新增 A0 代码的运行验证。

@@ -8,11 +8,15 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from ctxroute.api_probe import source_commit
+from ctxroute.api_probe import http_transport, source_commit
+from ctxroute.baselines.mini import MiniSweRunner
+from ctxroute.baselines.upstream import load_native
 from ctxroute.config import ArmConfig
 from ctxroute.domain import Task
+from ctxroute.evalkit.provenance import code_fingerprint, controlled_variables
 from ctxroute.models.deepseek import DeepSeekModel
 from ctxroute.models.scripted import ScriptedModel
+from ctxroute.orchestrator.base import Runner
 from ctxroute.orchestrator.engine import Engine, RunResult
 from ctxroute.sandbox.base import Sandbox
 from ctxroute.sandbox.fake import FakeSandbox
@@ -64,13 +68,26 @@ def build_live_engine(
     run_id: str | None = None,
     config_path: Path | None = None,
     metadata: dict[str, Any] | None = None,
-) -> Engine:
+) -> Runner:
     runtime: dict[str, Any] = json.loads((root / "configs/runtime.json").read_text())
     budget: dict[str, Any] = json.loads((root / "configs/budget.json").read_text())
     if runtime["execution_mode"] != "live" or budget["paid_execution_enabled"] is not True:
         raise RuntimeError("Live execution is disabled; current scope is code-only")
     cfg_path = config_path or root / f"configs/arms/{arm}.yaml"
     cfg = ArmConfig.load(cfg_path)
+    if cfg.arm != arm or cfg.engine not in {"ctxroute", "mini-swe-agent"}:
+        raise ValueError("Unsupported or mismatched experiment engine")
+    native = load_native(root) if cfg.engine == "mini-swe-agent" else None
+    sandbox_cfg = json.loads((root / "configs/sandbox.json").read_text())
+    transport_name = "http" if native is not None else runtime.get("model_transport", "http")
+    if transport_name == "pydantic_ai":
+        from ctxroute.models.pydantic_adapter import pydantic_transport
+
+        transport = pydantic_transport
+    elif transport_name == "http":
+        transport = http_transport
+    else:
+        raise ValueError("Unknown model transport")
     price_path = root / runtime["price_file"]
     prices = json.loads(price_path.read_text())
     image_digest = (metadata or {}).get("image_digest") or runtime["image_digest"]
@@ -94,9 +111,34 @@ def build_live_engine(
             "model_ids": {tier: entry["model_id"] for tier, entry in prices["models"].items()},
             "harness_version": runtime["harness_version"],
             "image_digest": image_digest,
+            "engine": cfg.engine,
+            "model_transport": transport_name,
+            "source_tree_sha256": code_fingerprint(root),
+            "controls": controlled_variables(
+                cfg,
+                runtime,
+                sandbox_cfg,
+                native_config=native.config if native is not None else None,
+            ),
+            **(
+                {
+                    "upstream_commit": native.policy["upstream_commit"],
+                    "upstream_version": native.policy["upstream_version"],
+                    "native_profile": native.policy["profile"],
+                    "native_source_blobs": native.policy["file_git_blobs"],
+                    "baseline_policy_sha256": hashlib.sha256(
+                        (root / "configs/baselines/mini-swe-agent.json").read_bytes()
+                    ).hexdigest(),
+                    "native_prompt_differs_from_A1": True,
+                }
+                if native is not None
+                else {}
+            ),
         },
     )
-    writer.snapshot("config", asdict(cfg))
+    writer.snapshot(
+        "config", {**asdict(cfg), **({"native": native.config} if native is not None else {})}
+    )
     writer.snapshot("task", asdict(task))
     ledger = Ledger(
         root / "results/budget/campaign.sqlite",
@@ -104,13 +146,6 @@ def build_live_engine(
         pause_at=money(str(budget["pause_at"])),
         enabled=True,
     )
-    transport = None
-    if runtime.get("model_transport", "http") == "pydantic_ai":
-        from ctxroute.models.pydantic_adapter import pydantic_transport
-
-        transport = pydantic_transport
-    elif runtime.get("model_transport", "http") != "http":
-        raise ValueError("Unknown model transport")
     model = DeepSeekModel(
         key=key,
         prices=prices,
@@ -118,8 +153,19 @@ def build_live_engine(
         writer=writer,
         input_guard_tokens=runtime["input_guard_tokens"],
         thinking=runtime["thinking"],
-        **({"transport": transport} if transport is not None else {}),
+        transport=transport,
     )
+    if native is not None:
+        return MiniSweRunner(
+            cfg,
+            model,
+            sandbox,
+            writer,
+            native,
+            cwd=sandbox_cfg["workdir"],
+            model_attempts=runtime["model_attempts"],
+            backoff_seconds=runtime["backoff_seconds"],
+        )
     return Engine(
         cfg,
         model,
