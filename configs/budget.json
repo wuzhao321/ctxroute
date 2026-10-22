@@ -1,0 +1,9 @@
+{
+  "currency": "USD",
+  "hard_limit": 10,
+  "pause_at": 8,
+  "max_calendar_days": 3,
+  "includes": ["model_api", "cloud_compute", "cloud_storage", "network"],
+  "paid_execution_enabled": false,
+  "note": "Reduced scope approved. Durable ledger implemented and tested; provider adapters are not implemented. Paid execution remains disabled until the selected environment and adapters enforce reservations."
+}

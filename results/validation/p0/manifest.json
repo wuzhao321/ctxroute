@@ -1,0 +1,14 @@
+{
+  "date": "2026-10-22",
+  "python": "3.12.14",
+  "uv": "0.13.5",
+  "packages": {
+    "pytest": "9.1.1",
+    "ruff": "0.17.1",
+    "pyright": "1.1.414",
+    "pyyaml": "6.0.3",
+    "pyarrow": "26.0.0"
+  },
+  "split_sha256": "2460598a8d33337477351db5e83b3e81576bbbcd26dc90f37323a9960f7e68f2",
+  "scope": "offline local validation only; no benchmark or paid calls"
+}

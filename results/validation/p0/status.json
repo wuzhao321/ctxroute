@@ -1,0 +1,7 @@
+{
+  "hard_limit_usd": "10",
+  "pause_at_usd": "8",
+  "paid_execution_enabled": false,
+  "status": "P0 local preparation; benchmark not run",
+  "note": "Configuration only; not a statement of account balance or billed cost"
+}

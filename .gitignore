@@ -1,0 +1,19 @@
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.venv/
+.tools/
+.cache/
+*.egg-info/
+dist/
+build/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+data/cache/
+results/private/
+# Preserve manifests, traces, predictions and evaluation evidence by default.
