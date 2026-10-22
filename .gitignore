@@ -16,4 +16,5 @@ __pycache__/
 .DS_Store
 data/cache/
 results/private/
+results/budget/*.sqlite*
 # Preserve manifests, traces, predictions and evaluation evidence by default.

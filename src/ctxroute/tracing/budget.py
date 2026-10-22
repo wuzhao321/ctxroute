@@ -99,6 +99,21 @@ class Ledger:
         with self._transaction() as conn:
             return self._snapshot(conn)
 
+    def freeze(self, request_id: str, revised_upper_bound: Decimal) -> None:
+        """Keep an uncertain charge reserved and block after a bound violation."""
+        amount = money(revised_upper_bound)
+        with self._transaction() as conn:
+            row = conn.execute(
+                "SELECT reserved, actual FROM requests WHERE id=?", (request_id,)
+            ).fetchone()
+            if row is None or row[1] is not None:
+                raise ValueError("Require an unsettled reservation")
+            conn.execute(
+                "UPDATE requests SET reserved=? WHERE id=?",
+                (str(max(amount, money(row[0]))), request_id),
+            )
+            conn.execute("UPDATE config SET blocked=1 WHERE id=1")
+
     def reserve(self, request_id: str, upper_bound: Decimal, kind: Kind) -> None:
         amount = money(upper_bound)
         if not self.enabled:

@@ -44,3 +44,11 @@
 - SWE-bench Lite upstream test 300 个 ID 按 SHA256(seed:instance_id) 排序，seed=20261022，前 60 为本项目 dev，余 240 封存；源 revision 与哈希在 data/split.json。Parquet 只投影 instance_id 列，提取后删除缓存。官方页面展示的 upstream dev 样例不参与本项目选样。
 - 预算模块使用 SQLite 事务，先预留后结算，崩溃/未知 usage 保留预留，重复 request_id 不可重复派发；费用超过预留时记录实际并锁停。它依赖调用方提供正确上界，不能撤销已发生费用。目前没有付费适配器，不能宣称完整 API 消费拦截已接通。
 - 本地 P0 质量门已通过；真实 Docker、API 和 harness 验收仍未完成，见 docs/P0_STATUS.md。
+
+## P0 API 准备增量
+
+用户回复“继续”后已实现固定连通探针，使用标准库 HTTPS 直接调用官方 Chat Completions 入口，避免为一次验证提前引入完整 Agent SDK；正式 Agent 适配仍按实现阶段核验。密钥只在用户终端隐藏输入，环境变量或 .env 读取。探针无自动重试，预留 0.10 USD；工程 input token 护栏不是供应商保证的计费上界，异常将保留证据并锁停。
+
+官方 schema 要求 prompt_cache_hit_tokens / prompt_cache_miss_tokens，二者之和须匹配 prompt_tokens。没有 usage 时保留预留，不补零。无法确定峰谷时段时报告价格区间，不把上界写成实际账单。相关来源见 docs/API_SETUP.md。
+
+低成本云环境还未确定；已记录 Modal 官方 harness 候选与 Sandbox 实际费率区别，以及传统主机关机仍计费的约束，见 docs/CLOUD_PLAN.md。没有建立资源、安装系统软件或访问密钥内容。

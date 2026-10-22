@@ -29,9 +29,9 @@ UV_CACHE_DIR=.cache/uv .tools/uv-package/bin/uv run --frozen --offline ctxroute 
 
 ## 密钥与付费
 
-目前无需设置密钥。首次调用前在本机配置 DEEPSEEK_API_KEY，不发送到聊天；.env 已被忽略，.env.example 没有真实密钥。
+密钥设置与单次 API 探针见 [API_SETUP](docs/API_SETUP.md)。运行 `.venv/bin/python scripts/setup_key.py` 可隐藏输入并以权限 600 保存；不要发送到聊天。.env 已被忽略。用 `.venv/bin/ctxroute api-probe` 查看离线计划。
 
-预算使用 Decimal 和 SQLite 事务，未知费用保持预留，超过预留的实际费用记录后锁停。目前没有 API/云适配器，paid_execution_enabled 保持 false；仅修改开关不会自动保证供应商限额。
+预算使用 Decimal 和 SQLite 事务，未知费用保持预留，超过预留时记录并锁停。已接入固定连通探针，尚无通用 Agent 或云适配器；paid_execution_enabled 保持 false。详见 [API 准备验收](docs/P0_API_STATUS.md) 和 [云端候选](docs/CLOUD_PLAN.md)。
 
 ## 项目约定
 

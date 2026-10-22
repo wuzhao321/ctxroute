@@ -1,0 +1,11 @@
+{
+  "model_tier": "cheap",
+  "price_file": "data/prices/2026-10-22.json",
+  "prompt": "Reply exactly OK.",
+  "max_output_tokens": 32,
+  "input_guard_tokens": 4096,
+  "timeout_seconds": 30,
+  "reservation_usd": "0.10",
+  "max_attempts": 1,
+  "thinking": "disabled"
+}
