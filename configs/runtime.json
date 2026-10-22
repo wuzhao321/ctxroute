@@ -1,0 +1,12 @@
+{
+  "execution_mode": "offline_only",
+  "price_file": "data/prices/2026-10-22.json",
+  "input_guard_tokens": 32000,
+  "thinking": "disabled",
+  "model_attempts": 2,
+  "backoff_seconds": 0.5,
+  "harness_version": null,
+  "image_digest": null,
+  "tool_transport": "mcp",
+  "model_transport": "pydantic_ai"
+}

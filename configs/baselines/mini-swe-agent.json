@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "upstream_repository": "https://github.com/SWE-agent/mini-swe-agent",
+  "upstream_commit": "04d809ceab9df28f9adaed044884180159172930",
+  "upstream_version": "2.4.6",
+  "profile": "native-text",
+  "config_file": "config/default.yaml",
+  "action_regex": "```mswea_bash_command\\s*\\n(.*?)\\n```",
+  "model_transport": "http",
+  "file_git_blobs": {
+    "__init__.py": "8dbc904c36c3ed31b3c7d9697e44dbf0cf6c0e87",
+    "agents/default.py": "ca310e37d7c61888c576f73f5e1790ac769407b1",
+    "models/utils/actions_text.py": "3129a1db46afc26b5ebd3d2af8170c57d1821fcd",
+    "environments/docker.py": "42e65e35a9af9e126d7e6846060922f8c95b2d5a",
+    "exceptions.py": "b11e404c98f62ace8c5c75b9a683105d49984a6c",
+    "config/default.yaml": "7753df3e42e7c9e792da9d063311221b299ba4d6"
+  },
+  "implementation_status": "code_only_not_integrated"
+}

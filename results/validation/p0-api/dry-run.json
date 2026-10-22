@@ -1,0 +1,9 @@
+{
+  "mode": "dry_run",
+  "model_id": "deepseek-flash",
+  "reservation_usd": "0.10",
+  "guard_cost_usd": "0.0012672",
+  "hard_limit_usd": "10",
+  "max_output_tokens": 32,
+  "paid_execution_enabled": false
+}
