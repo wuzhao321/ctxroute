@@ -19,6 +19,12 @@ from ctxroute.tracing.cost import money
 
 
 def main(argv: list[str] | None = None) -> None:
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == "reproduce":
+        from ctxroute.evalkit.workflow import main as reproduce
+
+        reproduce(argv[1:])
+        return
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     plan = commands.add_parser("plan", help="Write an offline frozen pilot schedule")

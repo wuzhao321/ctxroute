@@ -4,44 +4,16 @@ import hashlib
 import json
 import math
 from collections.abc import Callable
-from dataclasses import asdict, dataclass, field
-from typing import Any, cast
+from dataclasses import asdict, dataclass
 
 from ctxroute.config import ContextConfig
 from ctxroute.context.artifacts import ArtifactStore
-from ctxroute.domain import Step
+from ctxroute.context.memory import Memory as Memory
+from ctxroute.domain import EvidenceNote, Step
 
 
 class ContextLimit(RuntimeError):
     pass
-
-
-@dataclass(frozen=True)
-class Memory:
-    files_read: list[str] = field(default_factory=list[str])
-    commands_run: list[str] = field(default_factory=list[str])
-    hypotheses: list[str] = field(default_factory=list[str])
-    edits: list[str] = field(default_factory=list[str])
-    open_questions: list[str] = field(default_factory=list[str])
-
-    @classmethod
-    def parse(cls, text: str) -> "Memory":
-        value: Any = json.loads(text)
-        if not isinstance(value, dict):
-            raise ValueError("Summary must be an object")
-        data = cast(dict[str, Any], value)
-        fields = set(cls.__dataclass_fields__)
-        if set(data) != fields:
-            raise ValueError("Summary schema requires exactly five memory fields")
-        for items in data.values():
-            if not isinstance(items, list) or any(
-                not isinstance(x, str) for x in cast(list[Any], items)
-            ):
-                raise ValueError("Memory fields must be lists of strings")
-        return cls(**data)
-
-    def text(self) -> str:
-        return json.dumps(asdict(self), ensure_ascii=False, sort_keys=True)
 
 
 class TokenEstimator:
@@ -80,6 +52,42 @@ class ContextManager:
         self.estimator = TokenEstimator()
         self._attempted: set[str] = set()
         self._summary_cache: dict[str, Memory] = {}
+        self.confirmed: list[dict[str, str | int]] = []
+
+    def remember(self, notes: tuple[EvidenceNote, ...], history: list[Step]) -> None:
+        """Promote exact previously visible observations, never inferred conclusions."""
+        pending = list(self.confirmed)
+        for note in notes:
+            source = next((s for s in history if s.number == note.step), None)
+            if (
+                source is None
+                or not source.artifact_id
+                or source.action is None
+                or source.action.kind != "bash"
+                or not note.quote.strip()
+                or len(note.quote) > self.config.fixed_quote_chars
+                or note.quote not in source.observation
+                or not self.artifacts.contains(source.artifact_id, note.quote)
+            ):
+                raise ValueError(
+                    "Remember requires an exact quote from an earlier tool observation"
+                )
+            entry = {
+                "step": note.step,
+                "quote": note.quote,
+                "artifact_id": source.artifact_id,
+                "command": source.action.command,
+                "meaning": "historical_observation_not_current_truth",
+            }
+            if entry not in pending:
+                pending.append(entry)
+        if len(pending) > self.config.fixed_max_facts:
+            raise ValueError("Fixed observation capacity reached; existing evidence is retained")
+        self.confirmed = pending
+        if pending:
+            self.fixed["confirmed_observations"] = json.dumps(
+                pending, ensure_ascii=False, sort_keys=True
+            )
 
     def append(self, step: Step) -> None:
         self.recent.append(step)
@@ -134,7 +142,11 @@ class ContextManager:
             candidate = self.memory
         else:
             if fingerprint not in self._summary_cache:
-                self._summary_cache[fingerprint] = summarizer(batch)
+                proposed = summarizer(batch)
+                # Only artifacts already in this task's visible history may be cited.
+                if not proposed.references() <= self.artifacts.pinned:
+                    raise ValueError("Summary cites unknown evidence")
+                self._summary_cache[fingerprint] = proposed
             candidate = self._summary_cache[fingerprint]
         remaining = self.recent[count:]
         after = self.estimator.count(

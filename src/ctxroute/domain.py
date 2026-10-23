@@ -23,12 +23,19 @@ class Task:
 
 
 @dataclass(frozen=True)
+class EvidenceNote:
+    step: int
+    quote: str
+
+
+@dataclass(frozen=True)
 class Action:
     kind: Literal["bash", "recall", "submit"]
     command: str = ""
     artifact_id: str = ""
     start: int = 0
     end: int = 0
+    remember: tuple[EvidenceNote, ...] = ()
 
     @classmethod
     def parse(cls, text: str, *, recall_enabled: bool) -> "Action":
@@ -39,18 +46,37 @@ class Action:
         if not isinstance(raw, dict):
             raise ValueError("Action must be an object")
         data = cast(dict[str, Any], raw)
+        notes: list[EvidenceNote] = []
+        if "remember" in data:
+            items = data.pop("remember")
+            if not isinstance(items, list):
+                raise ValueError("Remember must be a list")
+            for item in cast(list[Any], items):
+                if not isinstance(item, dict):
+                    raise ValueError("Invalid evidence reference")
+                item = cast(dict[str, Any], item)
+                if (
+                    set(item) != {"step", "quote"}
+                    or type(item["step"]) is not int
+                    or item["step"] < 1
+                    or not isinstance(item["quote"], str)
+                ):
+                    raise ValueError("Invalid evidence reference")
+                notes.append(EvidenceNote(item["step"], item["quote"]))
         kind = data.get("tool")
         if kind == "submit" and set(data) == {"tool"}:
-            return cls("submit")
+            return cls("submit", remember=tuple(notes))
         if kind == "bash" and set(data) == {"tool", "command"}:
             command = data["command"]
             if isinstance(command, str) and command.strip() and "\x00" not in command:
-                return cls("bash", command=command)
+                return cls("bash", command=command, remember=tuple(notes))
         if kind == "recall" and recall_enabled and set(data) == {"tool", "id", "start", "end"}:
             start, end, artifact = data["start"], data["end"], data["id"]
             if type(start) is int and type(end) is int and 0 <= start < end:
                 if isinstance(artifact, str) and artifact:
-                    return cls("recall", artifact_id=artifact, start=start, end=end)
+                    return cls(
+                        "recall", artifact_id=artifact, start=start, end=end, remember=tuple(notes)
+                    )
         raise ValueError("Invalid action schema or unavailable tool")
 
 

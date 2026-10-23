@@ -1,6 +1,6 @@
 # ctxroute 架构与实验代码
 
-当前交付为代码，不含真实实验结果。遵循用户最新要求：暂停评测和环境搭建，重点实现主线功能，减少测试。运行配置仍为 `offline_only`，付费开关仍为 `false`。
+当前交付为代码，不含真实实验结果。2026-10-23 已完成本地依赖与 API 联调，当前按用户要求继续编写代码、减少测试。benchmark 配置仍为 `offline_only`；API 预算开关保留此前已授权的 `true`，本轮不调用 API。
 
 ```mermaid
 flowchart TD
@@ -32,6 +32,7 @@ flowchart TD
 | `domain.py` / `config.py` | Task、Action、Observation、RunState、请求与响应；严格动作字段；实验臂和预算配置 |
 | `orchestrator/engine.py` | ReAct 循环、格式纠错、最多两次请求尝试、步数/时间/费用终止、最终补丁与清理 |
 | `context/manager.py` | P0 系统与任务、P1 固定记忆、P2 五字段摘要、P3 最近 K 步；70%/90% 阈值、usage 校准、批量压缩、只接受缩小的摘要 |
+| `context/memory.py` | v2 嵌套摘要 schema、类型/范围校验及证据 ID 引用；P1 保存有原始输出依据的历史观察 |
 | `context/artifacts.py` | 内容寻址、全文落盘、头尾截断、字符范围 recall、引用固定和容量限制 |
 | `router/rules.py` | 上一步分类、连续无失败后降级、编辑/测试失败/工具错误/格式错误升级、5 步 strong 锁定 |
 | `models/` | 统一请求协议；DeepSeek 预算网关；可选 PydanticAI 适配器；离线固定响应替代实现 |
@@ -39,6 +40,7 @@ flowchart TD
 | `sandbox/` | 固定镜像摘要、禁网、资源限制、命令/输出限制、所属容器清理；直接/MCP 时延测量代码 |
 | `tracing/` | Decimal 缓存成本、SQLite 全局及任务预算、逐请求/逐步记录、状态与配置快照 |
 | `evalkit/campaign.py` | 固定 dev 前缀计划、输入哈希、进程互斥、完整任务级续跑、剩余实验组费用检查 |
+| `evalkit/workflow.py` | prepare/infer/export/analyze 分阶段复现、按臂预测交接、哈希核对与报告归档；不启动判分 |
 | `evalkit/export.py` | 同一臂/变体/seed 的预测合并、官方 harness argv 生成；不会自动判分 |
 | `evalkit/analysis.py` | 判分导入、token/缓存/成本上界/延迟/错误/重复读取统计、缺失记录、报告与失败案例表 |
 | `evalkit/statistics.py` | 单 seed 精确 McNemar、按实例聚合后的配对 bootstrap、成本与延迟中位比值 |
@@ -59,7 +61,7 @@ A6 多 Agent/A2A、A7 外部 harness、学习路由与本地模型按既有缩�
 
 完整任务已落盘则续跑时跳过；进程中断但未完成的任务保留原目录与费用预留，停止并要求先对账，不自动重复付费。这是任务级续跑，不是容器中途状态恢复。成功、失败、空补丁和预算终止都保留证据。变更后的任务输入不得沿用原 run_id。
 
-主执行默认选择 MCP + PydanticAI，二者均延迟导入。直接 Docker 函数调用和 HTTP 传输可作为诊断选项，在 manifest 留痕。当前配置拒绝一切真实执行；运行入口不会安装 SDK、下载镜像或创建云资源。
+主执行默认选择 MCP + PydanticAI，二者均延迟导入。直接 Docker 函数调用和 HTTP 传输可作为诊断选项，在 manifest 留痕。当前 benchmark 配置拒绝真实任务执行；固定 API 探针此前已单独联调。运行入口不会安装 SDK、下载镜像或创建云资源。
 
 ## 预算、隔离与证据
 
@@ -73,8 +75,8 @@ API usage 的高峰成本上界、确定非高峰时的结算与真实账单分�
 
 ## 实现取舍与验证边界
 
-核心状态使用标准库 dataclass 和显式校验，没有为了贴合技术栈而在本轮安装 Pydantic。PydanticAI 已编写为可选模型传输层，真实 SDK 绑定、Docker 隔离行为与 MCP 生命周期均尚未联调。结构化记忆目前以五个字符串列表保存路径、范围及事实，尚未细分为嵌套 Pydantic 字段。
+核心状态使用标准库 dataclass 和显式校验。PydanticAI 传输已通过固定短请求联调；MCP stdio 握手和四方法发现通过，Docker 操作与实际任务生命周期未测。结构化记忆已细分文件/行范围、命令/退出码、假设/证据、编辑/统计，采用共享 JSON Schema 与宿主严格校验，不宣称供应商原生 constrained decoding。P1 观察引用与迁移边界见 STRUCTURED_MEMORY.md。
 
 标准库 JSONL/CSV 为默认分析产物；Parquet、DuckDB 不在当前主线实现内。重复读取统计以重复只读命令作为代理，不能覆盖同一文件不同命令的所有重复读取。H1 输出按轨迹长度分组的观察性计数，不作因果拟合。
 
-没有采集 benchmark 结果，不给成功率、成本节省或真实性能数字。API、官方 harness、A0 运行依赖、图形依赖与可选扩展的环境准备均留到用户恢复该阶段后处理。
+没有采集 benchmark 结果，不给成功率、成本节省或真实性能数字。API、官方 harness 和 A0 运行依赖已经安装，固定 API 请求通过；Docker 环境、图形依赖及可选扩展仍待相应阶段。分阶段复现入口见 REPRODUCE.md。

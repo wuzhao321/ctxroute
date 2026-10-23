@@ -17,6 +17,8 @@ class ContextConfig:
     soft_ratio: float
     hard_ratio: float
     mode: Literal["none", "summary", "truncate"]
+    fixed_max_facts: int = 16
+    fixed_quote_chars: int = 500
 
     def __post_init__(self) -> None:
         if self.budget_tokens <= 0 or self.recent_steps < 1:
@@ -25,6 +27,8 @@ class ContextConfig:
             raise ValueError("Invalid compression thresholds")
         if self.mode not in {"none", "summary", "truncate"}:
             raise ValueError("Unknown compression mode")
+        if min(self.fixed_max_facts, self.fixed_quote_chars) < 1:
+            raise ValueError("Invalid fixed evidence limits")
 
 
 @dataclass(frozen=True)

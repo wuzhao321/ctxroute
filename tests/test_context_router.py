@@ -6,7 +6,7 @@ import pytest
 from ctxroute.config import ContextConfig, RouterConfig
 from ctxroute.context.artifacts import ArtifactStore
 from ctxroute.context.manager import ContextLimit, ContextManager, Memory
-from ctxroute.domain import Action, RunState, Step, Task
+from ctxroute.domain import Action, EvidenceNote, RunState, Step, Task
 from ctxroute.router.rules import RuleRouter, classify
 
 
@@ -23,17 +23,39 @@ def test_batch_compression_preserves_protected_parts_recent_steps_and_references
             Step(n, "strong", Action("bash", command="cat file"), "x" * 2000, 0, artifact_id=aid)
         )
     last_six = manager.recent[-6:]
+    evidence_id = next(iter(store.pinned))
+    manager.remember((EvidenceNote(1, "x" * 20),), manager.recent)
+    confirmed_before = manager.fixed["confirmed_observations"]
+    with pytest.raises(ValueError):
+        manager.remember((EvidenceNote(1, "invented fact"),), manager.recent)
+    assert manager.fixed["confirmed_observations"] == confirmed_before
     calls: list[str] = []
 
     def compress(text: str) -> Memory:
         calls.append(text)
         return Memory(
-            files_read=["file:1-10; confirmed fact"], hypotheses=["Rejected old hypothesis"]
+            files_read=[
+                {
+                    "path": "file",
+                    "start_line": 1,
+                    "end_line": 10,
+                    "facts": ["fixture fact"],
+                    "artifact_ids": [evidence_id],
+                }
+            ],
+            hypotheses=[
+                {"statement": "Old hypothesis", "status": "refuted", "evidence_ids": [evidence_id]}
+            ],
         )
 
     event = manager.compress(compress)
     assert event.accepted and event.after < event.before
     assert manager.recent == last_six
+    assert Memory.parse(manager.memory.text()) == manager.memory
+    assert manager.fixed["confirmed_observations"] == confirmed_before
+    bad_range = manager.memory.text().replace('"end_line": 10', '"end_line": 0')
+    with pytest.raises(ValueError):
+        Memory.parse(bad_range)
     assert all(s in manager.serialized() for s in ["SYSTEM-KEEP", "TASK-KEEP", "PINNED-KEEP"])
     manager.compress(compress)
     assert len(calls) == 1

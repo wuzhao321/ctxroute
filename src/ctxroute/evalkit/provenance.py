@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from ctxroute.config import ArmConfig
-from ctxroute.orchestrator.engine import ACTION_PROMPT, SUMMARY_PROMPT
+from ctxroute.orchestrator.engine import SUMMARY_PROMPT, action_prompt
 
 
 def code_fingerprint(root: Path) -> str:
@@ -26,7 +26,7 @@ def controlled_variables(
     native_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if native_config is None:
-        prompts = {"action": ACTION_PROMPT, "compression": SUMMARY_PROMPT}
+        prompts = {"action": action_prompt(cfg), "compression": SUMMARY_PROMPT}
         protocol = "json_action"
     else:
         prompts = {"agent": native_config["agent"], "model": native_config["model"]}

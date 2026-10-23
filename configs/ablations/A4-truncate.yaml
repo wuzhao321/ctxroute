@@ -6,7 +6,9 @@
     "recent_steps": 6,
     "soft_ratio": 0.7,
     "hard_ratio": 0.9,
-    "mode": "truncate"
+    "mode": "truncate",
+    "fixed_max_facts": 16,
+    "fixed_quote_chars": 500
   },
   "router": {
     "enabled": true,

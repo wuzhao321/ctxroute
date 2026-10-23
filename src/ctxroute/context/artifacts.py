@@ -55,6 +55,12 @@ class ArtifactStore:
             raise ValueError("Referenced artifact cannot be removed")
         self._path(artifact_id).unlink()
 
+    def contains(self, artifact_id: str, quote: str) -> bool:
+        data = self._path(artifact_id).read_bytes()
+        if hashlib.sha256(data).hexdigest() != artifact_id:
+            raise ValueError("Artifact content changed")
+        return quote in data.decode()
+
 
 def truncate(text: str, head: int, tail: int) -> str:
     if len(text) <= head + tail:
