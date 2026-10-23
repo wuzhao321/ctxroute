@@ -2,7 +2,7 @@
 
 面向软件工程 Agent 的结构化上下文压缩与步骤级模型路由实验框架。
 
-当前已编写 A0 原生执行适配及 A1–A5 核心循环、压缩与路由、沙箱/MCP 适配、预算和 trace，以及批量调度、消融和统计分析代码。按用户最新要求，**暂停环境搭建与全部真实评测**；付费执行仍关闭，没有实验效果数据。
+当前已编写 A0 原生执行适配及 A1–A5 核心循环、压缩与路由、沙箱/MCP 适配、预算和 trace，以及批量调度、消融和统计分析代码。按用户最新要求，**已完成本地运行依赖安装与 HTTP/PydanticAI API 联调，评测保持暂停**。API 预算开关已开启，benchmark runtime 仍为 offline_only，没有实验效果数据。详见 [本地联调记录](docs/LOCAL_INTEGRATION.md)。
 
 架构与实现边界见 [ARCHITECTURE](docs/ARCHITECTURE.md)，功能状态见 [IMPLEMENTATION_STATUS](docs/IMPLEMENTATION_STATUS.md)。预算保持 API 与云资源合计最多 10 USD，8 USD 暂停，不训练模型。
 
@@ -48,4 +48,4 @@ A0 已接入统一运行入口，保留上游原生文本循环并替换模型/�
 - `src/ctxroute/`：完整模块划分见架构文档。
 - `tests/`：已有离线测试。本轮不扩展验证矩阵、不运行模拟实验。
 
-需要检查代码时可运行 `sh scripts/check.sh`，不会调用模型或 Docker。当前真实 SDK 依赖未安装；不得把离线检查通过视为真实环境联调成功。既有密钥说明见 [API_SETUP](docs/API_SETUP.md)，本阶段无需配置。
+需要检查代码时可运行 `sh scripts/check.sh`，不会调用模型或 Docker。runtime extra 已安装并锁定；重建时使用 `.tools/uv-package/bin/uv sync --frozen --extra runtime --group data`。检查命令使用 --no-sync 保留已安装的可选依赖。API 操作见 [API_SETUP](docs/API_SETUP.md)；不要把连通成功当作 benchmark 成功。

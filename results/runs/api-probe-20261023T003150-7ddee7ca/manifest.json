@@ -1,0 +1,20 @@
+{
+  "mode": "execute",
+  "transport": "http",
+  "model_id": "deepseek-flash",
+  "reservation_usd": "0.10",
+  "guard_cost_usd": "0.0012672",
+  "hard_limit_usd": "10",
+  "max_output_tokens": 32,
+  "paid_execution_enabled": true,
+  "run_id": "api-probe-20261023T003150-7ddee7ca",
+  "commit": "5e8a25dd67a9c84c33bbb84688054c0b0c2db66c",
+  "purpose": "connectivity_probe_not_benchmark",
+  "started_at": "2026-10-23T00:31:50.157910+00:00",
+  "probe_config_sha256": "e4c75f8be890ac61ae0b13dac0570d72f7b71221b2d12a4fbdf3fde0db3d0fd7",
+  "budget_config_sha256": "f8a3fe1b6a5604902aa580380da2ee97334967f8934164f2f97f398ce58f73ba",
+  "price_sha256": "2ccb2363f3b54c1f6b565c28a541f9dbeeba6c321a18ee5624645ac82e3a6984",
+  "price_source": "https://api-docs.deepseek.com/quick_start/pricing/",
+  "documented_model_version": "DeepSeek-V4.1-Flash-1017",
+  "provider_retries": 0
+}

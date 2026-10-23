@@ -74,3 +74,5 @@ A0 仅实现原版证据导入与配置，原版付费执行接入及 A0/A1 一�
 初始只读检测：DeepSeek key 缺失或格式无效；Docker/Colima/Lima/Homebrew 未发现；运行 SDK 与 swebench 未安装；无本项目预算 ledger。正式评测环境尚未确定，不创建未知计费资源。
 
 用户已在本机设置密钥，并明确没有 Linux 主机/云账号，先完成本地依赖与 API 联调。允许开启 API 预算开关；benchmark runtime 继续 offline_only，不租主机、不安装 Docker。先执行廉价层固定 32 输出 token 探针，单请求预留最多 0.10 USD，无自动重试。
+
+本地联调结果：HTTP 成功；第一次 PydanticAI 尝试失败，检查已安装 SDK 确认 usage 为属性，修复旧方法调用后第二次成功。最初失败日志只保存通用错误，不能用修复推断其精确账单。原始记录全部保留；成功调用按 usage 合计 0.0000036 USD，未知调用保留 0.10 USD，供应商账单未核验。没有继续调用模型或执行评测。详见 LOCAL_INTEGRATION.md。
