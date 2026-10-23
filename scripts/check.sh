@@ -10,7 +10,7 @@ if ! command -v node >/dev/null 2>&1 && [ -x "$ctx_node_dir/node" ]; then
 fi
 ctx_uv="${CTXROUTE_UV:-$PWD/.tools/uv-package/bin/uv}"
 if [ ! -x "$ctx_uv" ]; then ctx_uv=uv; fi
-"$ctx_uv" run --frozen --offline ruff check .
-"$ctx_uv" run --frozen --offline ruff format --check .
-"$ctx_uv" run --frozen --offline pyright
-"$ctx_uv" run --frozen --offline pytest
+"$ctx_uv" run --frozen --offline --no-sync ruff check .
+"$ctx_uv" run --frozen --offline --no-sync ruff format --check .
+"$ctx_uv" run --frozen --offline --no-sync pyright
+"$ctx_uv" run --frozen --offline --no-sync pytest

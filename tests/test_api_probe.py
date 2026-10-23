@@ -18,6 +18,10 @@ def project(tmp_path: Path) -> Path:
     repo = Path(__file__).resolve().parents[1]
     shutil.copytree(repo / "configs", tmp_path / "configs")
     shutil.copytree(repo / "data/prices", tmp_path / "data/prices")
+    probe_path = tmp_path / "configs/api_probe.json"
+    probe = json.loads(probe_path.read_text())
+    probe["price_file"] = "data/prices/2026-10-22.json"
+    probe_path.write_text(json.dumps(probe))
     (tmp_path / ".gitignore").write_text(".env\n")
     (tmp_path / ".git").mkdir()
     (tmp_path / ".git/HEAD").write_text("a" * 40)
@@ -80,6 +84,10 @@ def test_dry_run_does_not_read_key_or_create_ledger(tmp_path: Path) -> None:
     repo = Path(__file__).resolve().parents[1]
     shutil.copytree(repo / "configs", tmp_path / "configs")
     shutil.copytree(repo / "data/prices", tmp_path / "data/prices")
+    budget_path = tmp_path / "configs/budget.json"
+    budget = json.loads(budget_path.read_text())
+    budget["paid_execution_enabled"] = False
+    budget_path.write_text(json.dumps(budget))
     assert run_probe(tmp_path)["mode"] == "dry_run"
     assert not (tmp_path / "results").exists()
     with pytest.raises(ProbeError, match="disabled"):

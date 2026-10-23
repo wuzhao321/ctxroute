@@ -22,6 +22,7 @@ def main() -> None:
     parser.add_argument("command", choices=["status", "key-status", "api-probe", "demo"])
     parser.add_argument("--config", type=Path, default=Path("configs/budget.json"))
     parser.add_argument("--execute", action="store_true", help="Dispatch one paid probe if enabled")
+    parser.add_argument("--transport", choices=["http", "pydantic_ai"], default="http")
     parser.add_argument("--arm", choices=["A1", "A2", "A3", "A4", "A5"], default="A4")
     parser.add_argument("--output", type=Path, default=Path("artifacts/demos"))
     args = parser.parse_args()
@@ -55,7 +56,7 @@ def main() -> None:
         if args.config != Path("configs/budget.json"):
             parser.error("api-probe uses the campaign's configs/budget.json")
         try:
-            result = run_probe(Path.cwd(), execute=args.execute)
+            result = run_probe(Path.cwd(), execute=args.execute, transport_name=args.transport)
         except (ProbeError, BudgetStopped) as exc:
             raise SystemExit(str(exc)) from None
         except (OSError, ValueError, KeyError, TypeError):
@@ -71,7 +72,7 @@ def main() -> None:
                 "hard_limit_usd": str(Decimal(str(config["hard_limit"]))),
                 "pause_at_usd": str(Decimal(str(config["pause_at"]))),
                 "paid_execution_enabled": config["paid_execution_enabled"],
-                "status": "Core experiment code; live execution paused, benchmark not run",
+                "status": "Local API integration enabled; benchmark execution paused",
                 "note": "Configuration only; not a statement of account balance or billed cost",
             },
             ensure_ascii=False,

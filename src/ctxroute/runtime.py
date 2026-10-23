@@ -3,10 +3,11 @@
 import hashlib
 import json
 from dataclasses import asdict
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from ctxroute.api_probe import http_transport, source_commit
 from ctxroute.baselines.mini import MiniSweRunner
@@ -93,7 +94,7 @@ def build_live_engine(
     image_digest = (metadata or {}).get("image_digest") or runtime["image_digest"]
     if not image_digest or not runtime["harness_version"]:
         raise RuntimeError("Live execution requires verified image and harness metadata")
-    if prices["retrieved_on"] != datetime.now(UTC).date().isoformat():
+    if prices["retrieved_on"] != datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat():
         raise RuntimeError("Price snapshot requires same-day verification before paid execution")
     key = load_key(root)
     run_id = run_id or f"{arm}-" + uuid4().hex

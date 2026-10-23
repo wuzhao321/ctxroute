@@ -29,4 +29,4 @@ cd /Users/wuzhaowei/Documents/ChatGPT/ctxroute
 - Ledger 在 results/budget/campaign.sqlite，跨运行共享；不能通过删除/换账本重置预算。未知 usage、连接超时仍保留 0.10 预留，不能假定没有发生计费。
 - 价格取自 [DeepSeek 官方价格页](https://api-docs.deepseek.com/quick_start/pricing/)。请求完整落在明确非高峰区间时按 usage 计算成本并结算；若涉及高峰/中国节假日歧义，报告上下界并保留预留等待对账。API usage 计算值与供应商账单验证分开标注。
 
-当前只有连通探针；尚未实现通用 Agent 模型适配器或工具调用循环。它不算 SWE-bench 实验结果。
+通用 Agent 模型适配器与工具调用循环已实现。另可用 `.venv/bin/ctxroute api-probe --transport pydantic_ai --execute` 验证实际 SDK 传输；它与 HTTP 探针共享固定提示、32 token 上限和预算账本，每次命令最多一个请求。manifest 记录 transport。两种探针均不算 SWE-bench 实验结果。

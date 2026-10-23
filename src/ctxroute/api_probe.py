@@ -139,8 +139,15 @@ def run_probe(
     *,
     execute: bool = False,
     transport: Transport = http_transport,
+    transport_name: str = "http",
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
 ) -> Json:
+    if transport_name not in {"http", "pydantic_ai"}:
+        raise ProbeError("invalid_probe_transport")
+    if transport_name == "pydantic_ai":
+        from ctxroute.models.pydantic_adapter import pydantic_transport
+
+        transport = pydantic_transport
     settings: Json = json.loads((root / "configs/api_probe.json").read_text())
     budget: Json = json.loads((root / "configs/budget.json").read_text())
     price_path = root / settings["price_file"]
@@ -160,6 +167,7 @@ def run_probe(
         raise ProbeError("configured_guard_exceeds_probe_allowance")
     plan = {
         "mode": "execute" if execute else "dry_run",
+        "transport": transport_name,
         "model_id": model["model_id"],
         "reservation_usd": str(reservation),
         "guard_cost_usd": str(guard_cost),

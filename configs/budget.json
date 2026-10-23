@@ -3,7 +3,12 @@
   "hard_limit": 10,
   "pause_at": 8,
   "max_calendar_days": 3,
-  "includes": ["model_api", "cloud_compute", "cloud_storage", "network"],
-  "paid_execution_enabled": false,
-  "note": "Fixed DeepSeek connectivity probe is integrated with the ledger and tested offline. General agent and cloud adapters are not implemented. Paid execution is disabled until the local key is ready and the verified probe configuration is committed."
+  "includes": [
+    "model_api",
+    "cloud_compute",
+    "cloud_storage",
+    "network"
+  ],
+  "paid_execution_enabled": true,
+  "note": "API integration authorized on 2026-10-23. Fixed probe reserves at most $0.10 per request; benchmark runtime remains offline_only pending an isolated environment. Campaign hard limit $10; pause at $8."
 }

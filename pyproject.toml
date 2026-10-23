@@ -12,6 +12,14 @@ dependencies = []
 [project.scripts]
 ctxroute = "ctxroute.cli:main"
 
+[project.optional-dependencies]
+runtime = [
+    "mcp>=1,<2",
+    "mini-swe-agent==2.4.6",
+    "pydantic-ai-slim[openai]>=2.59.0",
+    "swebench>=5.0.2",
+]
+
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.11", "pyright>=1.1.400", "pyyaml>=6", "types-pyyaml>=6"]
 data = ["pyarrow>=19"]

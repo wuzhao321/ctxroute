@@ -1,6 +1,6 @@
 {
   "execution_mode": "offline_only",
-  "price_file": "data/prices/2026-10-22.json",
+  "price_file": "data/prices/2026-10-23.json",
   "input_guard_tokens": 32000,
   "thinking": "disabled",
   "model_attempts": 2,

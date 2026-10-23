@@ -66,3 +66,11 @@ A0 仅实现原版证据导入与配置，原版付费执行接入及 A0/A1 一�
 用户继续授权代码实现，评测与环境搭建仍暂停。新增 MiniSweRunner，调用固定参考提交的原生 DefaultAgent、文本动作解析、观测模板及提交检测；模型与环境 I/O 接入既有预算和沙箱。保留 native-text profile，记录它与 A1 的提示、动作格式、截断和传输差异，不宣称 A0/A1 已等价。主优化比较仍使用 A1。
 
 参考版本 2.4.6 / commit 04d809ceab9df28f9adaed044884180159172930，关键源文件 blob SHA 固定在 configs/baselines/mini-swe-agent.json。没有安装该包、下载镜像或运行原生循环。计划开始冻结实现源代码指纹，代码改变后需生成新清单。详见 A0_ADAPTER.md。
+
+## 2026-10-23 恢复运行阶段
+
+用户明确授权继续安装依赖、调用 API 或运行评测，覆盖此前暂停要求。预算仍为累计 10 USD、8 USD 暂停，三天范围不自动重置。先安装项目级依赖、核验 SDK 接口和完成固定 API 探针，再按冻结 dev 顺序推进。无需为已授权的每一步重复确认；密钥与外部评测环境等缺失信息仍需用户提供。
+
+初始只读检测：DeepSeek key 缺失或格式无效；Docker/Colima/Lima/Homebrew 未发现；运行 SDK 与 swebench 未安装；无本项目预算 ledger。正式评测环境尚未确定，不创建未知计费资源。
+
+用户已在本机设置密钥，并明确没有 Linux 主机/云账号，先完成本地依赖与 API 联调。允许开启 API 预算开关；benchmark runtime 继续 offline_only，不租主机、不安装 Docker。先执行廉价层固定 32 输出 token 探针，单请求预留最多 0.10 USD，无自动重试。

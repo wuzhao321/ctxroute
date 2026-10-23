@@ -27,3 +27,11 @@ uv 0.13.5 在 .tools/uv-package；.venv 使用 Python 3.12.14。uv.lock 锁定�
 `sh scripts/check.sh` 已通过 lint、format、typecheck、18 项测试，详见 results/validation/p0/checks.log 与 manifest.json。CLI 配置状态也已离线验证。
 
 仍未运行：docker hello-world、harness 单实例构建与判分、DeepSeek 最小请求。完整 P0 尚未通过。
+
+## 2026-10-23 本地运行依赖增量
+
+按用户授权安装项目级 runtime extra，精确版本与哈希见 uv.lock：pydantic-ai-slim[openai] 2.59.0、MCP 1.30.0、mini-swe-agent 2.4.6、swebench 5.0.2、OpenAI SDK 3.37.0。未安装系统软件或 Docker 引擎。
+
+已确认 SDK 导入、上游 mini-swe-agent 关键源码哈希、真实 MCP stdio initialize/list_tools 四方法、官方 harness --help。没有调用沙箱工具或运行判分。记录见 results/validation/runtime-setup/。本轮必要检查修正了依赖运行配置的旧测试夹具，最终 62 passed、ruff 与 pyright 通过；未增加测试矩阵。
+
+API 密钥已由用户本机设置，状态检查只报告 configured。API 联调结果后续单独记录；不能据 SDK 导入推断调用成功。

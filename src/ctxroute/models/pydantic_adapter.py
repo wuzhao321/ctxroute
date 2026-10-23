@@ -12,29 +12,35 @@ def pydantic_transport(payload: dict[str, Any], key: str, timeout: int) -> dict[
         sdk = import_module("pydantic_ai")
         openai = import_module("openai")
         models = import_module("pydantic_ai.models.openai")
-        providers = import_module("pydantic_ai.providers.openai")
+        providers = import_module("pydantic_ai.providers.deepseek")
+        httpx = import_module("httpx")
+        usage_types = import_module("pydantic_ai.usage")
         client = openai.AsyncOpenAI(
             api_key=key,
             base_url="https://api.deepseek.com",
             max_retries=0,
             timeout=timeout,
+            http_client=httpx.AsyncClient(trust_env=False, follow_redirects=False),
         )
         try:
             messages = payload["messages"]
-            if (
-                len(messages) != 2
-                or messages[0]["role"] != "system"
-                or messages[1]["role"] != "user"
+            if len(messages) == 1 and messages[0]["role"] == "user":
+                system_prompt, user_prompt = (), messages[0]["content"]
+            elif (
+                len(messages) == 2
+                and messages[0]["role"] == "system"
+                and messages[1]["role"] == "user"
             ):
-                raise ValueError("Pydantic adapter expects the two-message context envelope")
+                system_prompt, user_prompt = messages[0]["content"], messages[1]["content"]
+            else:
+                raise ValueError("Expected fixed probe or two-message context envelope")
             model = models.OpenAIChatModel(
-                payload["model"], provider=providers.OpenAIProvider(openai_client=client)
+                payload["model"], provider=providers.DeepSeekProvider(openai_client=client)
             )
-            agent = sdk.Agent(
-                model, system_prompt=messages[0]["content"], output_type=str, retries=0
-            )
+            agent = sdk.Agent(model, system_prompt=system_prompt, output_type=str, retries=0)
             result = await agent.run(
-                messages[1]["content"],
+                user_prompt,
+                usage_limits=usage_types.UsageLimits(request_limit=1),
                 model_settings={
                     "max_tokens": payload["max_tokens"],
                     "temperature": payload["temperature"],
@@ -46,13 +52,22 @@ def pydantic_transport(payload: dict[str, Any], key: str, timeout: int) -> dict[
             usage = result.usage()
             if getattr(usage, "unmeasured_requests", 1) != 0 or usage.requests != 1:
                 raise ValueError("Missing usage or hidden additional SDK requests")
+            cached = usage.details.get("prompt_cache_hit_tokens")
+            missed = usage.details.get("prompt_cache_miss_tokens")
+            if type(cached) is not int or type(missed) is not int:
+                raise ValueError("Missing original DeepSeek cache usage fields")
             return {
-                "choices": [{"finish_reason": "stop", "message": {"content": result.output}}],
+                "choices": [
+                    {
+                        "finish_reason": result.response.finish_reason,
+                        "message": {"content": result.output},
+                    }
+                ],
                 "usage": {
                     "prompt_tokens": usage.input_tokens,
                     "completion_tokens": usage.output_tokens,
-                    "prompt_cache_hit_tokens": usage.cache_read_tokens,
-                    "prompt_cache_miss_tokens": usage.input_tokens - usage.cache_read_tokens,
+                    "prompt_cache_hit_tokens": cached,
+                    "prompt_cache_miss_tokens": missed,
                     "total_tokens": usage.input_tokens + usage.output_tokens,
                 },
             }
