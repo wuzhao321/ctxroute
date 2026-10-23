@@ -302,5 +302,5 @@ def run_probe(
             if isinstance(exc, ProbeError)
             else "transport_or_response_error"
         )
-        log({"event": "probe_failed", "error_type": code})
+        log({"event": "probe_failed", "error_type": code, "exception_class": type(exc).__name__})
         raise ProbeError(code) from None

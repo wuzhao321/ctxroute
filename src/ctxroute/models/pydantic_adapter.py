@@ -49,7 +49,7 @@ def pydantic_transport(payload: dict[str, Any], key: str, timeout: int) -> dict[
                     "extra_body": {"thinking": payload["thinking"]},
                 },
             )
-            usage = result.usage()
+            usage = result.usage
             if getattr(usage, "unmeasured_requests", 1) != 0 or usage.requests != 1:
                 raise ValueError("Missing usage or hidden additional SDK requests")
             cached = usage.details.get("prompt_cache_hit_tokens")
