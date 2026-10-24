@@ -1,0 +1,161 @@
+                    if ign in expr.free_symbols:
+                        break
+                else:
+                    to_eliminate.add(expr)
+                    return
+
+            seen_subexp.add(expr)
+
+            if expr in opt_subs:
+                expr = opt_subs[expr]
+
+            args = expr.args
+
+        list(map(_find_repeated, args))
+
+    for e in exprs:
+        if isinstance(e, Basic):
+            _find_repeated(e)
+
+    ## Rebuild tree
+
+    # Remove symbols from the generator that conflict with names in the expressions.
+    symbols = (symbol for symbol in symbols if symbol not in excluded_symbols)
+
+    replacements = []
+
+    subs = dict()
+
+    def _rebuild(expr):
+        if not isinstance(expr, (Basic, Unevaluated)):
+            return expr
+
+        if not expr.args:
+            return expr
+
+        if iterable(expr):
+            new_args = [_rebuild(arg) for arg in expr]
+            return expr.func(*new_args)
+
+        if expr in subs:
+            return subs[expr]
+
+        orig_expr = expr
+        if expr in opt_subs:
+            expr = opt_subs[expr]
+
+        # If enabled, parse Muls and Adds arguments by order to ensure
+        # replacement order independent from hashes
+        if order != 'none':
+            if isinstance(expr, (Mul, MatMul)):
+                c, nc = expr.args_cnc()
+                if c == [1]:
+                    args = nc
+                else:
+                    args = list(ordered(c)) + nc
+            elif isinstance(expr, (Add, MatAdd)):
+                args = list(ordered(expr.args))
+            else:
+                args = expr.args
+        else:
+            args = expr.args
+
+        new_args = list(map(_rebuild, args))
+        if isinstance(expr, Unevaluated) or new_args != args:
+            new_expr = expr.func(*new_args)
+        else:
+            new_expr = expr
+
+        if orig_expr in to_eliminate:
+            try:
+                sym = next(symbols)
+            except StopIteration:
+                raise ValueError("Symbols iterator ran out of symbols.")
+
+            if isinstance(orig_expr, MatrixExpr):
+                sym = MatrixSymbol(sym.name, orig_expr.rows,
+                    orig_expr.cols)
+
+            subs[orig_expr] = sym
+            replacements.append((sym, new_expr))
+            return sym
+
+        else:
+            return new_expr
+
+    reduced_exprs = []
+    for e in exprs:
+        if isinstance(e, Basic):
+            reduced_e = _rebuild(e)
+        else:
+            reduced_e = e
+        reduced_exprs.append(reduced_e)
+    return replacements, reduced_exprs
+
+
+def cse(exprs, symbols=None, optimizations=None, postprocess=None,
+        order='canonical', ignore=(), list=True):
+    """ Perform common subexpression elimination on an expression.
+
+    Parameters
+    ==========
+
+    exprs : list of SymPy expressions, or a single SymPy expression
+        The expressions to reduce.
+    symbols : infinite iterator yielding unique Symbols
+        The symbols used to label the common subexpressions which are pulled
+        out. The ``numbered_symbols`` generator is useful. The default is a
+        stream of symbols of the form "x0", "x1", etc. This must be an
+        infinite iterator.
+    optimizations : list of (callable, callable) pairs
+        The (preprocessor, postprocessor) pairs of external optimization
+        functions. Optionally 'basic' can be passed for a set of predefined
+        basic optimizations. Such 'basic' optimizations were used by default
+        in old implementation, however they can be really slow on larger
+        expressions. Now, no pre or post optimizations are made by default.
+    postprocess : a function which accepts the two return values of cse and
+        returns the desired form of output from cse, e.g. if you want the
+        replacements reversed the function might be the following lambda:
+        lambda r, e: return reversed(r), e
+    order : string, 'none' or 'canonical'
+        The order by which Mul and Add arguments are processed. If set to
+        'canonical', arguments will be canonically ordered. If set to 'none',
+        ordering will be faster but dependent on expressions hashes, thus
+        machine dependent and variable. For large expressions where speed is a
+        concern, use the setting order='none'.
+    ignore : iterable of Symbols
+        Substitutions containing any Symbol from ``ignore`` will be ignored.
+    list : bool, (default True)
+        Returns expression in list or else with same type as input (when False).
+
+    Returns
+    =======
+
+    replacements : list of (Symbol, expression) pairs
+        All of the common subexpressions that were replaced. Subexpressions
+        earlier in this list might show up in subexpressions later in this
+        list.
+    reduced_exprs : list of SymPy expressions
+        The reduced expressions with all of the replacements above.
+
+    Examples
+    ========
+
+    >>> from sympy import cse, SparseMatrix
+    >>> from sympy.abc import x, y, z, w
+    >>> cse(((w + x + y + z)*(w + y + z))/(w + x)**3)
+    ([(x0, y + z), (x1, w + x)], [(w + x0)*(x0 + x1)/x1**3])
+
+
+    List of expressions with recursive substitutions:
+
+    >>> m = SparseMatrix([x + y, x + y + z])
+    >>> cse([(x+y)**2, x + y + z, y + z, x + z + y, m])
+    ([(x0, x + y), (x1, x0 + z)], [x0**2, x1, y + z, x1, Matrix([
+    [x0],
+    [x1]])])
+
+    Note: the type and mutability of input matrices is retained.
+
+    >>> isinstance(_[1][-1], SparseMatrix)
+    True

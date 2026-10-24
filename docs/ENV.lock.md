@@ -43,3 +43,5 @@ API 密钥已由用户本机设置，状态检查只报告 configured。API 联�
 ## 2026-10-24 本机 ARM64 安装尝试
 
 用户已批准本机 ARM64 小规模评测。Lima 2.2.1 与 Docker CLI 29.6.1 已安装到项目 `.tools`，版本命令通过；Lima 官方发行包 SHA256 校验通过。VM 配置为 VZ/aarch64、4 CPU、8 GiB、120 GiB 稀疏盘上限、无宿主挂载。两个 Ubuntu 启动镜像地址均下载失败，按约定停止重试，VM 状态为 Stopped、Docker socket 不存在；Docker 引擎、容器隔离及 harness 实测仍未完成。安装哈希和失败日志位于 results/validation/live-preflight/，恢复说明见 LOCAL_ARM64.md。未新增 API 或云费用。
+
+后续重试成功，Ubuntu 镜像 945530880 字节且 SHA256 匹配；VM 启动后 Docker Server 29.9.2、Ubuntu 26.04.1 LTS，官方 harness 的任务镜像内部为其默认 Ubuntu/Python 环境。Docker/MCP 隔离检查通过，官方首题镜像与推理用清理历史镜像摘要见 harness-image.json。首题五臂推理已完成但均无补丁；官方负对照执行了实际测试、无基础设施错误。完成后于 2026-10-24 18:55（Asia/Shanghai）停止项目 VM，保留磁盘和构建缓存。运行前最后一次必要代码检查 63 passed。

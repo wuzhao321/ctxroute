@@ -1,0 +1,155 @@
+   646	class MatrixSymbol(MatrixExpr):
+   647	    """Symbolic representation of a Matrix object
+   648	
+   649	    Creates a SymPy Symbol to represent a Matrix. This matrix has a shape and
+   650	    can be included in Matrix Expressions
+   651	
+   652	    Examples
+   653	    ========
+   654	
+   655	    >>> from sympy import MatrixSymbol, Identity
+   656	    >>> A = MatrixSymbol('A', 3, 4) # A 3 by 4 Matrix
+   657	    >>> B = MatrixSymbol('B', 4, 3) # A 4 by 3 Matrix
+   658	    >>> A.shape
+   659	    (3, 4)
+   660	    >>> 2*A*B + Identity(3)
+   661	    I + 2*A*B
+   662	    """
+   663	    is_commutative = False
+   664	    is_symbol = True
+   665	    _diff_wrt = True
+   666	
+   667	    def __new__(cls, name, n, m):
+   668	        n, m = _sympify(n), _sympify(m)
+   669	
+   670	        cls._check_dim(m)
+   671	        cls._check_dim(n)
+   672	
+   673	        if isinstance(name, str):
+   674	            name = Str(name)
+   675	        obj = Basic.__new__(cls, name, n, m)
+   676	        return obj
+   677	
+   678	    @property
+   679	    def shape(self):
+   680	        return self.args[1], self.args[2]
+   681	
+   682	    @property
+   683	    def name(self):
+   684	        return self.args[0].name
+   685	
+   686	    def _entry(self, i, j, **kwargs):
+   687	        return MatrixElement(self, i, j)
+   688	
+   689	    @property
+   690	    def free_symbols(self):
+   691	        return {self}
+   692	
+   693	    def _eval_simplify(self, **kwargs):
+   694	        return self
+   695	
+   696	    def _eval_derivative(self, x):
+   697	        # x is a scalar:
+   698	        return ZeroMatrix(self.shape[0], self.shape[1])
+   699	
+   700	    def _eval_derivative_matrix_lines(self, x):
+   701	        if self != x:
+   702	            first = ZeroMatrix(x.shape[0], self.shape[0]) if self.shape[0] != 1 else S.Zero
+   703	            second = ZeroMatrix(x.shape[1], self.shape[1]) if self.shape[1] != 1 else S.Zero
+   704	            return [_LeftRightArgs(
+   705	                [first, second],
+   706	            )]
+   707	        else:
+   708	            first = Identity(self.shape[0]) if self.shape[0] != 1 else S.One
+   709	            second = Identity(self.shape[1]) if self.shape[1] != 1 else S.One
+   710	            return [_LeftRightArgs(
+   711	                [first, second],
+   712	            )]
+   713	
+   714	
+   715	def matrix_symbols(expr):
+   716	    return [sym for sym in expr.free_symbols if sym.is_Matrix]
+   717	
+   718	
+   719	class _LeftRightArgs:
+   720	    r"""
+   721	    Helper class to compute matrix derivatives.
+   722	
+   723	    The logic: when an expression is derived by a matrix `X_{mn}`, two lines of
+   724	    matrix multiplications are created: the one contracted to `m` (first line),
+   725	    and the one contracted to `n` (second line).
+   726	
+   727	    Transposition flips the side by which new matrices are connected to the
+   728	    lines.
+   729	
+   730	    The trace connects the end of the two lines.
+   731	    """
+   732	
+   733	    def __init__(self, lines, higher=S.One):
+   734	        self._lines = [i for i in lines]
+   735	        self._first_pointer_parent = self._lines
+   736	        self._first_pointer_index = 0
+   737	        self._first_line_index = 0
+   738	        self._second_pointer_parent = self._lines
+   739	        self._second_pointer_index = 1
+   740	        self._second_line_index = 1
+   741	        self.higher = higher
+   742	
+   743	    @property
+   744	    def first_pointer(self):
+   745	       return self._first_pointer_parent[self._first_pointer_index]
+   746	
+   747	    @first_pointer.setter
+   748	    def first_pointer(self, value):
+   749	        self._first_pointer_parent[self._first_pointer_index] = value
+   750	
+   751	    @property
+   752	    def second_pointer(self):
+   753	        return self._second_pointer_parent[self._second_pointer_index]
+   754	
+   755	    @second_pointer.setter
+   756	    def second_pointer(self, value):
+   757	        self._second_pointer_parent[self._second_pointer_index] = value
+   758	
+   759	    def __repr__(self):
+   760	        built = [self._build(i) for i in self._lines]
+   761	        return "_LeftRightArgs(lines=%s, higher=%s)" % (
+   762	            built,
+   763	            self.higher,
+   764	        )
+   765	
+   766	    def transpose(self):
+   767	        self._first_pointer_parent, self._second_pointer_parent = self._second_pointer_parent, self._first_pointer_parent
+   768	        self._first_pointer_index, self._second_pointer_index = self._second_pointer_index, self._first_pointer_index
+   769	        self._first_line_index, self._second_line_index = self._second_line_index, self._first_line_index
+   770	        return self
+   771	
+   772	    @staticmethod
+   773	    def _build(expr):
+   774	        if isinstance(expr, ExprBuilder):
+   775	            return expr.build()
+   776	        if isinstance(expr, list):
+   777	            if len(expr) == 1:
+   778	                return expr[0]
+   779	            else:
+   780	                return expr[0](*[_LeftRightArgs._build(i) for i in expr[1]])
+   781	        else:
+   782	            return expr
+   783	
+   784	    def build(self):
+   785	        data = [self._build(i) for i in self._lines]
+   786	        if self.higher != 1:
+   787	            data += [self._build(self.higher)]
+   788	        data = [i for i in data]
+   789	        return data
+   790	
+   791	    def matrix_form(self):
+   792	        if self.first != 1 and self.higher != 1:
+   793	            raise ValueError("higher dimensional array cannot be represented")
+   794	
+   795	        def _get_shape(elem):
+   796	            if isinstance(elem, MatrixExpr):
+   797	                return elem.shape
+   798	            return (None, None)
+   799	
+   800	        if _get_shape(self.first)[1] != _get_shape(self.second)[1]:

@@ -17,6 +17,7 @@ __pycache__/
 data/cache/
 results/private/
 results/budget/*.sqlite*
+results/budget/*.lock
 # Preserve manifests, traces, predictions and evaluation evidence by default.
 
 artifacts/demos/

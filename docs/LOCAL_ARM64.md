@@ -4,6 +4,8 @@
 
 ## 当前状态
 
+首轮五臂真实推理和官方汇总已完成；均为空补丁，无成功修复。另一次基础设施负对照执行了官方测试且无基础设施错误。项目 VM 已于 18:55 停止释放内存，镜像保留；当前 Stopped 是主动结束，不是下载阻塞。详见 `results/analysis/arm64-smoke-20261024/PILOT_REPORT.md`。本轮费用及失败原因以该报告为准，以下是环境建立过程的历史说明。
+
 最新进展：在用户授权重试后，固定 Ubuntu 镜像在独立 180 秒下载上限内成功下载且 SHA256 匹配。VM 已 Running、无宿主挂载，Docker Server 29.9.2 已可用。官方 harness 3.0.17 首题 ARM64 镜像已构建，推理镜像清理了未来 Git 引用；真实 Docker/MCP 隔离检查已通过。下面保留首次失败和恢复条件的历史记录。最新证据为 `ubuntu-image.json`、`lima-status-running.json`、`docker-info.json`、`harness-image.json` 和 `sandbox-audit.json`，均位于 results/validation/live-preflight/。
 
 MCP 初次检查被正式 runtime 的 offline_only 门阻止，记录保留为 sandbox-audit-attempt1.*。随后用只含容器配置的临时根目录完成 MCP 实测；此检查没有加载模型或密钥。新 runtime 准备切换 live，固定首题五臂总 allowance 1 USD，模型效果仍需实际推理和官方判分。

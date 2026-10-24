@@ -1,0 +1,301 @@
+   400	                key=lambda k: (common_arg_candidates_counts[k], k)))
+   401	
+   402	        while common_arg_candidates:
+   403	            j = common_arg_candidates.pop(last=False)
+   404	
+   405	            com_args = arg_tracker.func_to_argset[i].intersection(
+   406	                    arg_tracker.func_to_argset[j])
+   407	
+   408	            if len(com_args) <= 1:
+   409	                # This may happen if a set of common arguments was already
+   410	                # combined in a previous iteration.
+   411	                continue
+   412	
+   413	            # For all sets, replace the common symbols by the function
+   414	            # over them, to allow recursive matches.
+   415	
+   416	            diff_i = arg_tracker.func_to_argset[i].difference(com_args)
+   417	            if diff_i:
+   418	                # com_func needs to be unevaluated to allow for recursive matches.
+   419	                com_func = Unevaluated(
+   420	                        func_class, arg_tracker.get_args_in_value_order(com_args))
+   421	                com_func_number = arg_tracker.get_or_add_value_number(com_func)
+   422	                arg_tracker.update_func_argset(i, diff_i | OrderedSet([com_func_number]))
+   423	                changed.add(i)
+   424	            else:
+   425	                # Treat the whole expression as a CSE.
+   426	                #
+   427	                # The reason this needs to be done is somewhat subtle. Within
+   428	                # tree_cse(), to_eliminate only contains expressions that are
+   429	                # seen more than once. The problem is unevaluated expressions
+   430	                # do not compare equal to the evaluated equivalent. So
+   431	                # tree_cse() won't mark funcs[i] as a CSE if we use an
+   432	                # unevaluated version.
+   433	                com_func_number = arg_tracker.get_or_add_value_number(funcs[i])
+   434	
+   435	            diff_j = arg_tracker.func_to_argset[j].difference(com_args)
+   436	            arg_tracker.update_func_argset(j, diff_j | OrderedSet([com_func_number]))
+   437	            changed.add(j)
+   438	
+   439	            for k in arg_tracker.get_subset_candidates(
+   440	                    com_args, common_arg_candidates):
+   441	                diff_k = arg_tracker.func_to_argset[k].difference(com_args)
+   442	                arg_tracker.update_func_argset(k, diff_k | OrderedSet([com_func_number]))
+   443	                changed.add(k)
+   444	
+   445	        if i in changed:
+   446	            opt_subs[funcs[i]] = Unevaluated(func_class,
+   447	                arg_tracker.get_args_in_value_order(arg_tracker.func_to_argset[i]))
+   448	
+   449	        arg_tracker.stop_arg_tracking(i)
+   450	
+   451	
+   452	def opt_cse(exprs, order='canonical'):
+   453	    """Find optimization opportunities in Adds, Muls, Pows and negative
+   454	    coefficient Muls.
+   455	
+   456	    Parameters
+   457	    ==========
+   458	
+   459	    exprs : list of SymPy expressions
+   460	        The expressions to optimize.
+   461	    order : string, 'none' or 'canonical'
+   462	        The order by which Mul and Add arguments are processed. For large
+   463	        expressions where speed is a concern, use the setting order='none'.
+   464	
+   465	    Returns
+   466	    =======
+   467	
+   468	    opt_subs : dictionary of expression substitutions
+   469	        The expression substitutions which can be useful to optimize CSE.
+   470	
+   471	    Examples
+   472	    ========
+   473	
+   474	    >>> from sympy.simplify.cse_main import opt_cse
+   475	    >>> from sympy.abc import x
+   476	    >>> opt_subs = opt_cse([x**-2])
+   477	    >>> k, v = list(opt_subs.keys())[0], list(opt_subs.values())[0]
+   478	    >>> print((k, v.as_unevaluated_basic()))
+   479	    (x**(-2), 1/(x**2))
+   480	    """
+   481	    from sympy.matrices.expressions import MatAdd, MatMul, MatPow
+   482	    opt_subs = dict()
+   483	
+   484	    adds = OrderedSet()
+   485	    muls = OrderedSet()
+   486	
+   487	    seen_subexp = set()
+   488	
+   489	    def _find_opts(expr):
+   490	
+   491	        if not isinstance(expr, (Basic, Unevaluated)):
+   492	            return
+   493	
+   494	        if expr.is_Atom or expr.is_Order:
+   495	            return
+   496	
+   497	        if iterable(expr):
+   498	            list(map(_find_opts, expr))
+   499	            return
+   500	
+   501	        if expr in seen_subexp:
+   502	            return expr
+   503	        seen_subexp.add(expr)
+   504	
+   505	        list(map(_find_opts, expr.args))
+   506	
+   507	        if expr.could_extract_minus_sign():
+   508	            neg_expr = -expr
+   509	            if not neg_expr.is_Atom:
+   510	                opt_subs[expr] = Unevaluated(Mul, (S.NegativeOne, neg_expr))
+   511	                seen_subexp.add(neg_expr)
+   512	                expr = neg_expr
+   513	
+   514	        if isinstance(expr, (Mul, MatMul)):
+   515	            muls.add(expr)
+   516	
+   517	        elif isinstance(expr, (Add, MatAdd)):
+   518	            adds.add(expr)
+   519	
+   520	        elif isinstance(expr, (Pow, MatPow)):
+   521	            base, exp = expr.base, expr.exp
+   522	            if exp.could_extract_minus_sign():
+   523	                opt_subs[expr] = Unevaluated(Pow, (Pow(base, -exp), -1))
+   524	
+   525	    for e in exprs:
+   526	        if isinstance(e, (Basic, Unevaluated)):
+   527	            _find_opts(e)
+   528	
+   529	    # split muls into commutative
+   530	    commutative_muls = OrderedSet()
+   531	    for m in muls:
+   532	        c, nc = m.args_cnc(cset=False)
+   533	        if c:
+   534	            c_mul = m.func(*c)
+   535	            if nc:
+   536	                if c_mul == 1:
+   537	                    new_obj = m.func(*nc)
+   538	                else:
+   539	                    new_obj = m.func(c_mul, m.func(*nc), evaluate=False)
+   540	                opt_subs[m] = new_obj
+   541	            if len(c) > 1:
+   542	                commutative_muls.add(c_mul)
+   543	
+   544	    match_common_args(Add, adds, opt_subs)
+   545	    match_common_args(Mul, commutative_muls, opt_subs)
+   546	
+   547	    return opt_subs
+   548	
+   549	
+   550	def tree_cse(exprs, symbols, opt_subs=None, order='canonical', ignore=()):
+   551	    """Perform raw CSE on expression tree, taking opt_subs into account.
+   552	
+   553	    Parameters
+   554	    ==========
+   555	
+   556	    exprs : list of SymPy expressions
+   557	        The expressions to reduce.
+   558	    symbols : infinite iterator yielding unique Symbols
+   559	        The symbols used to label the common subexpressions which are pulled
+   560	        out.
+   561	    opt_subs : dictionary of expression substitutions
+   562	        The expressions to be substituted before any CSE action is performed.
+   563	    order : string, 'none' or 'canonical'
+   564	        The order by which Mul and Add arguments are processed. For large
+   565	        expressions where speed is a concern, use the setting order='none'.
+   566	    ignore : iterable of Symbols
+   567	        Substitutions containing any Symbol from ``ignore`` will be ignored.
+   568	    """
+   569	    from sympy.matrices.expressions import MatrixExpr, MatrixSymbol, MatMul, MatAdd
+   570	    from sympy.polys.rootoftools import RootOf
+   571	
+   572	    if opt_subs is None:
+   573	        opt_subs = dict()
+   574	
+   575	    ## Find repeated sub-expressions
+   576	
+   577	    to_eliminate = set()
+   578	
+   579	    seen_subexp = set()
+   580	    excluded_symbols = set()
+   581	
+   582	    def _find_repeated(expr):
+   583	        if not isinstance(expr, (Basic, Unevaluated)):
+   584	            return
+   585	
+   586	        if isinstance(expr, RootOf):
+   587	            return
+   588	
+   589	        if isinstance(expr, Basic) and (expr.is_Atom or expr.is_Order):
+   590	            if expr.is_Symbol:
+   591	                excluded_symbols.add(expr)
+   592	            return
+   593	
+   594	        if iterable(expr):
+   595	            args = expr
+   596	
+   597	        else:
+   598	            if expr in seen_subexp:
+   599	                for ign in ignore:
+   600	                    if ign in expr.free_symbols:
+   601	                        break
+   602	                else:
+   603	                    to_eliminate.add(expr)
+   604	                    return
+   605	
+   606	            seen_subexp.add(expr)
+   607	
+   608	            if expr in opt_subs:
+   609	                expr = opt_subs[expr]
+   610	
+   611	            args = expr.args
+   612	
+   613	        list(map(_find_repeated, args))
+   614	
+   615	    for e in exprs:
+   616	        if isinstance(e, Basic):
+   617	            _find_repeated(e)
+   618	
+   619	    ## Rebuild tree
+   620	
+   621	    # Remove symbols from the generator that conflict with names in the expressions.
+   622	    symbols = (symbol for symbol in symbols if symbol not in excluded_symbols)
+   623	
+   624	    replacements = []
+   625	
+   626	    subs = dict()
+   627	
+   628	    def _rebuild(expr):
+   629	        if not isinstance(expr, (Basic, Unevaluated)):
+   630	            return expr
+   631	
+   632	        if not expr.args:
+   633	            return expr
+   634	
+   635	        if iterable(expr):
+   636	            new_args = [_rebuild(arg) for arg in expr]
+   637	            return expr.func(*new_args)
+   638	
+   639	        if expr in subs:
+   640	            return subs[expr]
+   641	
+   642	        orig_expr = expr
+   643	        if expr in opt_subs:
+   644	            expr = opt_subs[expr]
+   645	
+   646	        # If enabled, parse Muls and Adds arguments by order to ensure
+   647	        # replacement order independent from hashes
+   648	        if order != 'none':
+   649	            if isinstance(expr, (Mul, MatMul)):
+   650	                c, nc = expr.args_cnc()
+   651	                if c == [1]:
+   652	                    args = nc
+   653	                else:
+   654	                    args = list(ordered(c)) + nc
+   655	            elif isinstance(expr, (Add, MatAdd)):
+   656	                args = list(ordered(expr.args))
+   657	            else:
+   658	                args = expr.args
+   659	        else:
+   660	            args = expr.args
+   661	
+   662	        new_args = list(map(_rebuild, args))
+   663	        if isinstance(expr, Unevaluated) or new_args != args:
+   664	            new_expr = expr.func(*new_args)
+   665	        else:
+   666	            new_expr = expr
+   667	
+   668	        if orig_expr in to_eliminate:
+   669	            try:
+   670	                sym = next(symbols)
+   671	            except StopIteration:
+   672	                raise ValueError("Symbols iterator ran out of symbols.")
+   673	
+   674	            if isinstance(orig_expr, MatrixExpr):
+   675	                sym = MatrixSymbol(sym.name, orig_expr.rows,
+   676	                    orig_expr.cols)
+   677	
+   678	            subs[orig_expr] = sym
+   679	            replacements.append((sym, new_expr))
+   680	            return sym
+   681	
+   682	        else:
+   683	            return new_expr
+   684	
+   685	    reduced_exprs = []
+   686	    for e in exprs:
+   687	        if isinstance(e, Basic):
+   688	            reduced_e = _rebuild(e)
+   689	        else:
+   690	            reduced_e = e
+   691	        reduced_exprs.append(reduced_e)
+   692	    return replacements, reduced_exprs
+   693	
+   694	
+   695	def cse(exprs, symbols=None, optimizations=None, postprocess=None,
+   696	        order='canonical', ignore=(), list=True):
+   697	    """ Perform common subexpression elimination on an expression.
+   698	
+   699	    Parameters
+   700	    ==========

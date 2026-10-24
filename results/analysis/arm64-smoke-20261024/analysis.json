@@ -1,0 +1,421 @@
+{
+  "summaries": {
+    "A0": {
+      "started": 1,
+      "graded": 0,
+      "missing_grades": 1,
+      "successes_over_started": 0.0,
+      "graded_pass_at_1": null,
+      "wall_p50_ms": 83290.2873750063,
+      "wall_p95_ms": 83290.2873750063,
+      "wall_sample_count": 1,
+      "termination_counts": {
+        "context_limit": 1
+      },
+      "budget_termination_rate": 1.0
+    },
+    "A1": {
+      "started": 1,
+      "graded": 0,
+      "missing_grades": 1,
+      "successes_over_started": 0.0,
+      "graded_pass_at_1": null,
+      "wall_p50_ms": 42563.22512500628,
+      "wall_p95_ms": 42563.22512500628,
+      "wall_sample_count": 1,
+      "termination_counts": {
+        "format_failure": 1
+      },
+      "budget_termination_rate": 0.0
+    },
+    "A2": {
+      "started": 1,
+      "graded": 0,
+      "missing_grades": 1,
+      "successes_over_started": 0.0,
+      "graded_pass_at_1": null,
+      "wall_p50_ms": 33316.83350000094,
+      "wall_p95_ms": 33316.83350000094,
+      "wall_sample_count": 1,
+      "termination_counts": {
+        "format_failure": 1
+      },
+      "budget_termination_rate": 0.0
+    },
+    "A3": {
+      "started": 1,
+      "graded": 0,
+      "missing_grades": 1,
+      "successes_over_started": 0.0,
+      "graded_pass_at_1": null,
+      "wall_p50_ms": 45168.465250004374,
+      "wall_p95_ms": 45168.465250004374,
+      "wall_sample_count": 1,
+      "termination_counts": {
+        "format_failure": 1
+      },
+      "budget_termination_rate": 0.0
+    },
+    "A4": {
+      "started": 1,
+      "graded": 0,
+      "missing_grades": 1,
+      "successes_over_started": 0.0,
+      "graded_pass_at_1": null,
+      "wall_p50_ms": 17997.698500003025,
+      "wall_p95_ms": 17997.698500003025,
+      "wall_sample_count": 1,
+      "termination_counts": {
+        "format_failure": 1
+      },
+      "budget_termination_rate": 0.0
+    }
+  },
+  "comparisons": [
+    {
+      "baseline": "A1",
+      "candidate": "A0",
+      "analysis": "dev exploratory",
+      "success_difference": {
+        "n": 0,
+        "estimate": null,
+        "ci95": null
+      },
+      "excluded_pairs": {
+        "sympy__sympy-22840": "missing official grade"
+      },
+      "mcnemar": null,
+      "noninferiority_margin": 0.05,
+      "ci_clears_margin": false,
+      "population_noninferiority_claim": false,
+      "cost_upper_ratio_median": {
+        "n": 0,
+        "estimate": null,
+        "ci95": null
+      },
+      "cost_upper_difference_median": {
+        "n": 0,
+        "estimate": null,
+        "ci95": null
+      },
+      "cost_pairs_unmeasured": [],
+      "zero_cost_denominators": [],
+      "latency_ratio_median": {
+        "n": 0,
+        "estimate": null,
+        "ci95": null
+      },
+      "latency_pairs_excluded": []
+    },
+    {
+      "baseline": "A1",
+      "candidate": "A2",
+      "analysis": "dev exploratory",
+      "success_difference": {
+        "n": 0,
+        "estimate": null,
+        "ci95": null
+      },
+      "excluded_pairs": {
+        "sympy__sympy-22840": "missing official grade"
+      },
+      "mcnemar": null,
+      "noninferiority_margin": 0.05,
+      "ci_clears_margin": false,
+      "population_noninferiority_claim": false,
+      "cost_upper_ratio_median": {
+        "n": 0,
+        "estimate": null,
+        "ci95": null
+      },
+      "cost_upper_difference_median": {
+        "n": 0,
+        "estimate": null,
+        "ci95": null
+      },
+      "cost_pairs_unmeasured": [],
+      "zero_cost_denominators": [],
+      "latency_ratio_median": {
+        "n": 0,
+        "estimate": null,
+        "ci95": null
+      },
+      "latency_pairs_excluded": []
+    },
+    {
+      "baseline": "A1",
+      "candidate": "A3",
+      "analysis": "dev exploratory",
+      "success_difference": {
+        "n": 0,
+        "estimate": null,
+        "ci95": null
+      },
+      "excluded_pairs": {
+        "sympy__sympy-22840": "missing official grade"
+      },
+      "mcnemar": null,
+      "noninferiority_margin": 0.05,
+      "ci_clears_margin": false,
+      "population_noninferiority_claim": false,
+      "cost_upper_ratio_median": {
+        "n": 0,
+        "estimate": null,
+        "ci95": null
+      },
+      "cost_upper_difference_median": {
+        "n": 0,
+        "estimate": null,
+        "ci95": null
+      },
+      "cost_pairs_unmeasured": [],
+      "zero_cost_denominators": [],
+      "latency_ratio_median": {
+        "n": 0,
+        "estimate": null,
+        "ci95": null
+      },
+      "latency_pairs_excluded": []
+    },
+    {
+      "baseline": "A1",
+      "candidate": "A4",
+      "analysis": "dev exploratory",
+      "success_difference": {
+        "n": 0,
+        "estimate": null,
+        "ci95": null
+      },
+      "excluded_pairs": {
+        "sympy__sympy-22840": "missing official grade"
+      },
+      "mcnemar": null,
+      "noninferiority_margin": 0.05,
+      "ci_clears_margin": false,
+      "population_noninferiority_claim": false,
+      "cost_upper_ratio_median": {
+        "n": 0,
+        "estimate": null,
+        "ci95": null
+      },
+      "cost_upper_difference_median": {
+        "n": 0,
+        "estimate": null,
+        "ci95": null
+      },
+      "cost_pairs_unmeasured": [],
+      "zero_cost_denominators": [],
+      "latency_ratio_median": {
+        "n": 0,
+        "estimate": null,
+        "ci95": null
+      },
+      "latency_pairs_excluded": []
+    }
+  ],
+  "h1_observational_bins": [
+    {
+      "arm": "A0",
+      "step_interval": [
+        0,
+        10
+      ],
+      "started": 0,
+      "graded": 0,
+      "resolved": 0
+    },
+    {
+      "arm": "A0",
+      "step_interval": [
+        11,
+        25
+      ],
+      "started": 0,
+      "graded": 0,
+      "resolved": 0
+    },
+    {
+      "arm": "A0",
+      "step_interval": [
+        26,
+        50
+      ],
+      "started": 1,
+      "graded": 0,
+      "resolved": 0
+    },
+    {
+      "arm": "A0",
+      "step_interval": [
+        51,
+        100000
+      ],
+      "started": 0,
+      "graded": 0,
+      "resolved": 0
+    },
+    {
+      "arm": "A1",
+      "step_interval": [
+        0,
+        10
+      ],
+      "started": 0,
+      "graded": 0,
+      "resolved": 0
+    },
+    {
+      "arm": "A1",
+      "step_interval": [
+        11,
+        25
+      ],
+      "started": 1,
+      "graded": 0,
+      "resolved": 0
+    },
+    {
+      "arm": "A1",
+      "step_interval": [
+        26,
+        50
+      ],
+      "started": 0,
+      "graded": 0,
+      "resolved": 0
+    },
+    {
+      "arm": "A1",
+      "step_interval": [
+        51,
+        100000
+      ],
+      "started": 0,
+      "graded": 0,
+      "resolved": 0
+    },
+    {
+      "arm": "A2",
+      "step_interval": [
+        0,
+        10
+      ],
+      "started": 0,
+      "graded": 0,
+      "resolved": 0
+    },
+    {
+      "arm": "A2",
+      "step_interval": [
+        11,
+        25
+      ],
+      "started": 1,
+      "graded": 0,
+      "resolved": 0
+    },
+    {
+      "arm": "A2",
+      "step_interval": [
+        26,
+        50
+      ],
+      "started": 0,
+      "graded": 0,
+      "resolved": 0
+    },
+    {
+      "arm": "A2",
+      "step_interval": [
+        51,
+        100000
+      ],
+      "started": 0,
+      "graded": 0,
+      "resolved": 0
+    },
+    {
+      "arm": "A3",
+      "step_interval": [
+        0,
+        10
+      ],
+      "started": 0,
+      "graded": 0,
+      "resolved": 0
+    },
+    {
+      "arm": "A3",
+      "step_interval": [
+        11,
+        25
+      ],
+      "started": 1,
+      "graded": 0,
+      "resolved": 0
+    },
+    {
+      "arm": "A3",
+      "step_interval": [
+        26,
+        50
+      ],
+      "started": 0,
+      "graded": 0,
+      "resolved": 0
+    },
+    {
+      "arm": "A3",
+      "step_interval": [
+        51,
+        100000
+      ],
+      "started": 0,
+      "graded": 0,
+      "resolved": 0
+    },
+    {
+      "arm": "A4",
+      "step_interval": [
+        0,
+        10
+      ],
+      "started": 1,
+      "graded": 0,
+      "resolved": 0
+    },
+    {
+      "arm": "A4",
+      "step_interval": [
+        11,
+        25
+      ],
+      "started": 0,
+      "graded": 0,
+      "resolved": 0
+    },
+    {
+      "arm": "A4",
+      "step_interval": [
+        26,
+        50
+      ],
+      "started": 0,
+      "graded": 0,
+      "resolved": 0
+    },
+    {
+      "arm": "A4",
+      "step_interval": [
+        51,
+        100000
+      ],
+      "started": 0,
+      "graded": 0,
+      "resolved": 0
+    }
+  ],
+  "cloud_billed_usd": null,
+  "actual_api_billed_usd": null,
+  "note": "Costs are cache-aware usage upper bounds, not bills; missing data is retained."
+}

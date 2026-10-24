@@ -1,0 +1,4 @@
+75:    is_symbol = False
+203:        if self.is_Atom:
+586:    is_symbol = True
+664:    is_symbol = True

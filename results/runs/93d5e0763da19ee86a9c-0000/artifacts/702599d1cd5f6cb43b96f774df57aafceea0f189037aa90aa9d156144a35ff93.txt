@@ -1,0 +1,27 @@
+sympy/matrices/expressions/adjoint.py:7:class Adjoint(MatrixExpr):
+sympy/matrices/expressions/applyfunc.py:9:class ElementwiseApplyFunction(MatrixExpr):
+sympy/matrices/expressions/blockmatrix.py:24:class BlockMatrix(MatrixExpr):
+sympy/matrices/expressions/companion.py:8:class CompanionMatrix(MatrixExpr):
+sympy/matrices/expressions/diagonal.py:9:class DiagonalMatrix(MatrixExpr):
+sympy/matrices/expressions/diagonal.py:86:class DiagonalOf(MatrixExpr):
+sympy/matrices/expressions/diagonal.py:157:class DiagMatrix(MatrixExpr):
+sympy/matrices/expressions/factorizations.py:4:class Factorization(MatrixExpr):
+sympy/matrices/expressions/fourier.py:9:class DFT(MatrixExpr):
+sympy/matrices/expressions/funcmatrix.py:9:class FunctionMatrix(MatrixExpr):
+sympy/matrices/expressions/hadamard.py:40:class HadamardProduct(MatrixExpr):
+sympy/matrices/expressions/hadamard.py:308:class HadamardPower(MatrixExpr):
+sympy/matrices/expressions/kronecker.py:86:class KroneckerProduct(MatrixExpr):
+sympy/matrices/expressions/matadd.py:18:class MatAdd(MatrixExpr, Add):
+sympy/matrices/expressions/matexpr.py:37:class MatrixExpr(Expr):
+sympy/matrices/expressions/matexpr.py:38:    """Superclass for Matrix Expressions
+sympy/matrices/expressions/matexpr.py:581:class MatrixElement(Expr):
+sympy/matrices/expressions/matexpr.py:646:class MatrixSymbol(MatrixExpr):
+sympy/matrices/expressions/matmul.py:22:class MatMul(MatrixExpr, Mul):
+sympy/matrices/expressions/matpow.py:12:class MatPow(MatrixExpr):
+sympy/matrices/expressions/permutation.py:9:class PermutationMatrix(MatrixExpr):
+sympy/matrices/expressions/permutation.py:168:class MatrixPermute(MatrixExpr):
+sympy/matrices/expressions/slice.py:31:class MatrixSlice(MatrixExpr):
+sympy/matrices/expressions/special.py:10:class ZeroMatrix(MatrixExpr):
+sympy/matrices/expressions/special.py:98:class Identity(MatrixExpr):
+sympy/matrices/expressions/special.py:197:class OneMatrix(MatrixExpr):
+sympy/matrices/expressions/transpose.py:7:class Transpose(MatrixExpr):

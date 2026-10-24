@@ -2,11 +2,13 @@
 
 | 拟写结论 | 状态 | 缺少证据 |
 | --- | --- | --- |
-| 基线 pass@1 | 未测 | manifest、预测、官方 harness 日志 |
+| 首个 dev 基线运行 | 已测但无修复：A0–A4 均空补丁；正式 test 未测 | 见下方实测证据，不支持总体成功率结论 |
 | 压缩降低含缓存成本 | 未测 | A1/A2 配对 trace、成本脚本与置信区间 |
 | pass@1 非劣 | 未测 | 已冻结协议、足够样本、配对 CI |
 | 路由降低成本或延迟 | 未测 | A1/A3/A4 配对结果 |
-| 沙箱启动及 exec 开销 | 未测 | 机器配置和真实 benchmark 样本 |
+| 沙箱启动及 exec 开销 | 本机有限工程采样已测 | 5 个 exec 样本/路线，仅热环境诊断，不外推 |
 | A2A 协议实现 | 未实现 | 代码与协议验证 |
 
 当前已实现离线成本核算、预算预留和数据边界，并通过本地质量门（results/validation/p0/）；这些是工程验证，不是模型或 benchmark 结果，不得据此填写实验效果简历条目。
+
+2026-10-24 实测证据：[首个 dev 报告](../results/analysis/arm64-smoke-20261024/PILOT_REPORT.md)、[逐臂汇总](../results/analysis/arm64-smoke-20261024/pilot-summary.json)、[官方聚合报告](../results/analysis/arm64-smoke-20261024/official-summaries/)、[沙箱原始采样](../results/validation/live-preflight/sandbox-audit.json)。五臂均未触发压缩、所有请求均用 strong，不能据此声称压缩或路由节省费用。官方对空补丁不启动测试；另一次人工 marker 负对照执行了测试但不计模型成绩。

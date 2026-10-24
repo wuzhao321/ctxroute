@@ -1,6 +1,6 @@
 # 分阶段复现入口
 
-新增入口统一准备、推理、预测交接与分析。当前 benchmark 仍为 offline_only；本轮只编写代码和执行离线检查，没有启动任务或官方判分。
+入口统一准备、推理、预测交接与分析。2026-10-24 首题 ARM64 pilot 已运行，实际清单位于 results/plans/arm64-smoke-20261024.json。当前 runtime 为 live，VM 已停止；下面是接口模板，不能覆盖首轮结果。后续实现修改后需新建计划。
 
 ## 1. 固定清单与准备
 
@@ -11,7 +11,7 @@
 
 准备阶段只读已冻结的计划并写 workflow.json，不读取密钥或题目，不创建预算账本。按 arm、variant、seed 分组，所有计划任务都保留。相同内容可重复准备，已有不同内容禁止覆盖。代码或运行配置改变后必须生成新计划及新 workflow，包括从 offline_only 切换到 live 的情况。
 
-## 2. 推理（等待恢复执行阶段）
+## 2. 推理（显式付费执行）
 
 ```sh
 .venv/bin/ctxroute experiment reproduce infer --workflow results/workflows/pilot-v2 --tasks data/private/tasks.jsonl --images configs/private/images.json --execute

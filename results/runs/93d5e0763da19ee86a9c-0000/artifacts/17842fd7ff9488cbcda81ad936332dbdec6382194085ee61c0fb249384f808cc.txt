@@ -1,0 +1,31 @@
+   190	        return Determinant(self)
+   191	
+   192	    def _eval_transpose(self):
+   193	        return Transpose(self)
+   194	
+   195	    def _eval_power(self, exp):
+   196	        """
+   197	        Override this in sub-classes to implement simplification of powers.  The cases where the exponent
+   198	        is -1, 0, 1 are already covered in MatPow.doit(), so implementations can exclude these cases.
+   199	        """
+   200	        return MatPow(self, exp)
+   201	
+   202	    def _eval_simplify(self, **kwargs):
+   203	        if self.is_Atom:
+   204	            return self
+   205	        else:
+   206	            return self.func(*[simplify(x, **kwargs) for x in self.args])
+   207	
+   208	    def _eval_adjoint(self):
+   209	        from sympy.matrices.expressions.adjoint import Adjoint
+   210	        return Adjoint(self)
+   211	
+   212	    def _eval_derivative_n_times(self, x, n):
+   213	        return Basic._eval_derivative_n_times(self, x, n)
+   214	
+   215	    def _eval_derivative(self, x):
+   216	        # `x` is a scalar:
+   217	        if self.has(x):
+   218	            # See if there are other methods using it:
+   219	            return super()._eval_derivative(x)
+   220	        else:

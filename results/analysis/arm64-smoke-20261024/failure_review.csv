@@ -1,0 +1,6 @@
+run_id,instance_id,termination,category,notes,evidence_path
+93d5e0763da19ee86a9c-0000,sympy__sympy-22840,context_limit,context_budget_exhausted,Empty patch confirmed by official aggregate; no per-instance tests run. First-run evidence retained.,results/runs/93d5e0763da19ee86a9c-0000
+93d5e0763da19ee86a9c-0001,sympy__sympy-22840,format_failure,invalid_action_protocol,Empty patch confirmed by official aggregate; no per-instance tests run. First-run evidence retained.,results/runs/93d5e0763da19ee86a9c-0001
+93d5e0763da19ee86a9c-0002,sympy__sympy-22840,format_failure,invalid_action_protocol,Empty patch confirmed by official aggregate; no per-instance tests run. First-run evidence retained.,results/runs/93d5e0763da19ee86a9c-0002
+93d5e0763da19ee86a9c-0003,sympy__sympy-22840,format_failure,invalid_action_protocol,Empty patch confirmed by official aggregate; no per-instance tests run. First-run evidence retained.,results/runs/93d5e0763da19ee86a9c-0003
+93d5e0763da19ee86a9c-0004,sympy__sympy-22840,format_failure,invalid_action_protocol,Empty patch confirmed by official aggregate; no per-instance tests run. First-run evidence retained.,results/runs/93d5e0763da19ee86a9c-0004

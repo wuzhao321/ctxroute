@@ -1,0 +1,31 @@
+37:class MatrixExpr(Expr):
+38-    """Superclass for Matrix Expressions
+39-
+40-    MatrixExprs represent abstract matrices, linear transformations represented
+41-    within a particular basis.
+42-
+43-    Examples
+44-    ========
+45-
+46-    >>> from sympy import MatrixSymbol
+47-    >>> A = MatrixSymbol('A', 3, 3)
+48-    >>> y = MatrixSymbol('y', 3, 1)
+49-    >>> x = (A.T*A).I * A * y
+50-
+51-    See Also
+52-    ========
+53-
+54-    MatrixSymbol, MatAdd, MatMul, Transpose, Inverse
+55-    """
+56-
+57-    # Should not be considered iterable by the
+58-    # sympy.utilities.iterables.iterable function. Subclass that actually are
+59-    # iterable (i.e., explicit matrices) should set this to True.
+60-    _iterable = False
+61-
+62-    _op_priority = 11.0
+63-
+64-    is_Matrix = True  # type: bool
+65-    is_MatrixExpr = True  # type: bool
+66-    is_Identity = None  # type: FuzzyBool
+67-    is_Inverse = False

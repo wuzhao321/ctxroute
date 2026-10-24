@@ -8,6 +8,8 @@
 
 用户已确认 3 天缩减方案：本轮交付最小实现、固定 dev pilot（资源允许时）与诚实报告，正式 test 暂缓。先读 docs/DECISIONS.md 和 docs/PREREG.md。P0 本地代码质量门已通过，API 连通已验证，完整 P0 的 Docker 与 harness 验收仍待执行。
 
+最新实测（2026-10-24）：本机 Docker/MCP 隔离验收与官方 harness 基础设施负对照已通过。首题 A0–A4 五臂已执行，均为空补丁：A0 context_limit，A1–A4 format_failure；未触发压缩，所有请求使用 strong。本轮 usage 费用 0.073165268 USD，累计 0.073168868 USD，另保留 0.10 USD 未知预留；未核验账单。报告见 results/analysis/arm64-smoke-20261024/PILOT_REPORT.md。不得覆盖首轮结果或继续原清单重跑；后续先处理动作协议可靠性，再冻结新版本计划。VM 完成后停止以释放内存，镜像保留。
+
 ## 实验与费用
 
 - 证据优先：数字来自 results/ 中的原始记录及分析脚本；未测写“未测”。不得挑选有利任务、seed 或隐藏失败。

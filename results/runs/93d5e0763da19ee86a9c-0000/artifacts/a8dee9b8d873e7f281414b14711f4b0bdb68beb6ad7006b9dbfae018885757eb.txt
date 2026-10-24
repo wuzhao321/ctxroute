@@ -1,0 +1,66 @@
+   581	class MatrixElement(Expr):
+   582	    parent = property(lambda self: self.args[0])
+   583	    i = property(lambda self: self.args[1])
+   584	    j = property(lambda self: self.args[2])
+   585	    _diff_wrt = True
+   586	    is_symbol = True
+   587	    is_commutative = True
+   588	
+   589	    def __new__(cls, name, n, m):
+   590	        n, m = map(_sympify, (n, m))
+   591	        from sympy.matrices.matrices import MatrixBase
+   592	        if isinstance(name, (MatrixBase,)):
+   593	            if n.is_Integer and m.is_Integer:
+   594	                return name[n, m]
+   595	        if isinstance(name, str):
+   596	            name = Symbol(name)
+   597	        else:
+   598	            name = _sympify(name)
+   599	            if not isinstance(name.kind, MatrixKind):
+   600	                raise TypeError("First argument of MatrixElement should be a matrix")
+   601	        obj = Expr.__new__(cls, name, n, m)
+   602	        return obj
+   603	
+   604	    def doit(self, **kwargs):
+   605	        deep = kwargs.get('deep', True)
+   606	        if deep:
+   607	            args = [arg.doit(**kwargs) for arg in self.args]
+   608	        else:
+   609	            args = self.args
+   610	        return args[0][args[1], args[2]]
+   611	
+   612	    @property
+   613	    def indices(self):
+   614	        return self.args[1:]
+   615	
+   616	    def _eval_derivative(self, v):
+   617	
+   618	        if not isinstance(v, MatrixElement):
+   619	            from sympy.matrices.matrices import MatrixBase
+   620	            if isinstance(self.parent, MatrixBase):
+   621	                return self.parent.diff(v)[self.i, self.j]
+   622	            return S.Zero
+   623	
+   624	        M = self.args[0]
+   625	
+   626	        m, n = self.parent.shape
+   627	
+   628	        if M == v.args[0]:
+   629	            return KroneckerDelta(self.args[1], v.args[1], (0, m-1)) * \
+   630	                   KroneckerDelta(self.args[2], v.args[2], (0, n-1))
+   631	
+   632	        if isinstance(M, Inverse):
+   633	            from sympy.concrete.summations import Sum
+   634	            i, j = self.args[1:]
+   635	            i1, i2 = symbols("z1, z2", cls=Dummy)
+   636	            Y = M.args[0]
+   637	            r1, r2 = Y.shape
+   638	            return -Sum(M[i, i1]*Y[i1, i2].diff(v)*M[i2, j], (i1, 0, r1-1), (i2, 0, r2-1))
+   639	
+   640	        if self.has(v.args[0]):
+   641	            return None
+   642	
+   643	        return S.Zero
+   644	
+   645	
+   646	class MatrixSymbol(MatrixExpr):

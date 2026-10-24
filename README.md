@@ -2,7 +2,7 @@
 
 面向软件工程 Agent 的结构化上下文压缩与步骤级模型路由实验框架。
 
-当前已编写 A0 原生执行适配及 A1–A5 核心循环、压缩与路由、沙箱/MCP 适配、预算和 trace，以及批量调度、消融和统计分析代码。已完成本地运行依赖安装与 HTTP/PydanticAI API 联调。**2026-10-24 已恢复真实评测准备，执行位置待确定**；已固定兼容数据的官方 harness 3.0.17，并提取首个 dev 四字段输入。API 预算开关已开启，benchmark runtime 仍为 offline_only，没有实验效果数据。详见 [本地联调记录](docs/LOCAL_INTEGRATION.md)。
+当前已编写 A0 原生执行适配及 A1–A5 核心循环、压缩与路由、沙箱/MCP 适配、预算和 trace，以及批量调度、消融和统计分析代码。**2026-10-24 已完成本机 ARM64 首题五臂真实 pilot**：A0 上下文耗尽，A1–A4 动作格式失败，全部为空补丁。官方基础设施负对照已执行测试，环境链路可用；没有证明算法有效。见[首轮报告](results/analysis/arm64-smoke-20261024/PILOT_REPORT.md)。本轮 usage 费用约 0.0732 USD，另保留历史未知费用预留 0.10 USD；未核验账单。runtime 为 live，项目 VM 已停止，后续应先修复动作协议并冻结新计划。
 
 架构与实现边界见 [ARCHITECTURE](docs/ARCHITECTURE.md)，功能状态见 [IMPLEMENTATION_STATUS](docs/IMPLEMENTATION_STATUS.md)。预算保持 API 与云资源合计最多 10 USD，8 USD 暂停，不训练模型。
 
@@ -20,11 +20,11 @@
 
 ## 本轮代码补齐
 
-结构化记忆已升级为带路径/行范围、退出码、假设状态和证据引用的 v2；P1 支持精确引用历史工具观察，详见 [记忆接口](docs/STRUCTURED_MEMORY.md)。新的 [分阶段复现入口](docs/REPRODUCE.md) 串联准备、推理、预测交接和报告分析。`make reproduce` 默认仅准备已有清单，推理需另选阶段及显式执行；判分保持在独立环境。当前没有真实任务结果，阶段总结见 [REPORT](docs/REPORT.md)。
+结构化记忆已升级为带路径/行范围、退出码、假设状态和证据引用的 v2；P1 支持精确引用历史工具观察，详见 [记忆接口](docs/STRUCTURED_MEMORY.md)。[分阶段复现入口](docs/REPRODUCE.md) 串联准备、推理、预测交接和报告分析。`make reproduce` 默认仅准备已有清单，推理需另选阶段及显式执行；判分保持在独立环境。阶段总结见 [REPORT](docs/REPORT.md)。
 
 ## 已编写的后续执行入口
 
-以下用于说明代码接口，当前配置下不会执行。这些不是本轮操作要求。
+以下用于说明代码接口；带 `--execute` 的推理命令在引擎就绪时会真实调用 API 并计费。本轮首题已运行，不覆盖或重跑原清单。
 
 ```sh
 # tasks.jsonl 必须是去除答案字段后的四字段输入；images.json 映射 instance_id 到镜像摘要。
