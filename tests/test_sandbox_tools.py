@@ -45,10 +45,10 @@ def test_docker_arguments_lifecycle_timeout_and_no_host_mounts() -> None:
     assert not {"-v", "--volume", "--mount", "--privileged", "-e"}.intersection(create)
     result = sandbox.execute(handle, "sleep 1000", 0.5)
     assert result.timed_out
-    assert calls[-1] == ["docker", "kill", handle]
+    assert calls[-1] == [CONFIG["docker_binary"], "kill", handle]
     assert "0.5s" in calls[-2]
     sandbox.destroy(handle)
-    assert calls[-1] == ["docker", "rm", "-f", handle]
+    assert calls[-1] == [CONFIG["docker_binary"], "rm", "-f", handle]
     with pytest.raises(ValueError):
         sandbox.destroy("someone-elses-container")
 

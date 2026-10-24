@@ -1,5 +1,5 @@
 {
-  "docker_binary": "docker",
+  "docker_binary": "./scripts/docker-local.sh",
   "cpus": 2,
   "memory": "4g",
   "pids_limit": 128,

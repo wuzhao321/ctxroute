@@ -4,6 +4,10 @@
 
 ## 当前状态
 
+最新进展：在用户授权重试后，固定 Ubuntu 镜像在独立 180 秒下载上限内成功下载且 SHA256 匹配。VM 已 Running、无宿主挂载，Docker Server 29.9.2 已可用。官方 harness 3.0.17 首题 ARM64 镜像已构建，推理镜像清理了未来 Git 引用；真实 Docker/MCP 隔离检查已通过。下面保留首次失败和恢复条件的历史记录。最新证据为 `ubuntu-image.json`、`lima-status-running.json`、`docker-info.json`、`harness-image.json` 和 `sandbox-audit.json`，均位于 results/validation/live-preflight/。
+
+MCP 初次检查被正式 runtime 的 offline_only 门阻止，记录保留为 sandbox-audit-attempt1.*。随后用只含容器配置的临时根目录完成 MCP 实测；此检查没有加载模型或密钥。新 runtime 准备切换 live，固定首题五臂总 allowance 1 USD，模型效果仍需实际推理和官方判分。
+
 - Lima 2.2.1 安装于 `.tools/lima`；官方发行包 SHA256 与官方 SHA256SUMS 一致。
 - Docker CLI 29.6.1 安装于 `.tools/docker`。这是客户端；Docker 引擎尚未安装成功。
 - 已创建专用 `ctx` 虚拟机配置：VZ 原生 aarch64、4 CPU、8 GiB 内存、120 GiB 稀疏盘上限、`mounts: []`。配置不等于已启动的 VM 或已创建的 120 GiB 磁盘。

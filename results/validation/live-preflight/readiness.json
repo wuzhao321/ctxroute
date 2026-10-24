@@ -3,7 +3,7 @@
   "kind": "live_evaluation_preflight_not_benchmark",
   "machine_arch": "arm64",
   "free_disk_gib": 876.2,
-  "docker_available": false,
+  "docker_available": true,
   "linux_host_configured": false,
   "cloud_account_available": false,
   "harness_version": "3.0.17",
@@ -27,12 +27,14 @@
   "execution_environment_confirmed": true,
   "inference_started": false,
   "harness_grading_started": false,
-  "blocker": "Ubuntu boot image download failed at both official URLs; stopped after two failures",
+  "blocker": null,
   "execution_environment": "local_arm64_lima_vz_no_cloud",
   "docker_cli_version": "29.6.1",
   "lima_version": "2.2.1",
-  "vm_status": "Stopped",
-  "docker_engine_available": false,
+  "vm_status": "Running",
+  "docker_engine_available": true,
   "installation_evidence": "local-tools.json",
-  "vm_evidence": "lima-status.json"
+  "vm_evidence": "lima-status.json",
+  "sandbox_audit_passed": true,
+  "task_image_id": "sha256:d6847485fe40b46c8ff0f4dada222d6d032ee7cd3643e5596141b7ffa53dccee"
 }

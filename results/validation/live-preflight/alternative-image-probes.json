@@ -1,0 +1,17 @@
+[
+  {
+    "name": "alpine",
+    "status": 200,
+    "size": "235077632"
+  },
+  {
+    "name": "alpine-github",
+    "status": 200,
+    "size": "108181504"
+  },
+  {
+    "name": "debian",
+    "status": 200,
+    "size": "340590592"
+  }
+]

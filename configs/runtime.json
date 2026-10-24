@@ -1,12 +1,12 @@
 {
-  "execution_mode": "offline_only",
+  "execution_mode": "live",
   "price_file": "data/prices/2026-10-24.json",
   "input_guard_tokens": 32000,
   "thinking": "disabled",
   "model_attempts": 2,
   "backoff_seconds": 0.5,
   "harness_version": "3.0.17",
-  "image_digest": null,
+  "image_digest": "sha256:d6847485fe40b46c8ff0f4dada222d6d032ee7cd3643e5596141b7ffa53dccee",
   "tool_transport": "mcp",
   "model_transport": "pydantic_ai"
 }

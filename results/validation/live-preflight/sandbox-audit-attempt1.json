@@ -1,0 +1,35 @@
+{
+  "kind": "real_sandbox_audit_not_benchmark",
+  "checks": {
+    "network_none": true,
+    "no_mounts": true,
+    "cap_drop_all": true,
+    "no_new_privileges": true,
+    "resource_limits": true,
+    "no_credentials": true,
+    "filesystem_network_python": true,
+    "initial_patch_empty": true,
+    "timeout_stops_container_and_children": true,
+    "output_limit": true,
+    "output_limit_stops_container": true
+  },
+  "samples_ms": {
+    "create_to_exec_ready": [
+      321.7145000016899
+    ],
+    "direct_exec": [
+      75.41674999811221,
+      73.16412499494618,
+      69.19550000020536,
+      69.38020900270203,
+      69.46458300080849
+    ]
+  },
+  "environment_probe": {
+    "output": "/opt/miniconda3/envs/testbed/bin/python\n1.10.dev\n",
+    "exit_code": 0,
+    "timed_out": false,
+    "output_limited": false,
+    "rpc_ms": 0.0
+  }
+}

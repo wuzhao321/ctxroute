@@ -109,9 +109,20 @@ def test_task_budget_includes_compression_and_unsettled_usage(tmp_path: Path) ->
         ledger.reserve("retry", D("0.09"), "model_api", scope="task", scope_limit=D("0.50"))
 
 
-def test_offline_mode_rejects_live_factory_without_reading_key() -> None:
+def test_offline_mode_rejects_live_factory_without_reading_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    configs = tmp_path / "configs"
+    configs.mkdir()
+    (configs / "runtime.json").write_text('{"execution_mode":"offline_only"}')
+    (configs / "budget.json").write_text('{"paid_execution_enabled":true}')
+
+    def forbidden_key_read(root: Path) -> str:
+        raise AssertionError("Offline mode must reject before reading credentials")
+
+    monkeypatch.setattr("ctxroute.runtime.load_key", forbidden_key_read)
     with pytest.raises(RuntimeError, match="code-only"):
-        build_live_engine(ROOT, "A1", TASK, FakeSandbox())
+        build_live_engine(tmp_path, "A1", TASK, FakeSandbox())
 
 
 def test_recorded_over_budget_response_terminates(tmp_path: Path) -> None:
