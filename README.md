@@ -52,4 +52,4 @@ A0 已接入统一运行入口，保留上游原生文本循环并替换模型/�
 - `src/ctxroute/`：完整模块划分见架构文档。
 - `tests/`：已有离线测试。本轮不扩展验证矩阵、不运行模拟实验。
 
-需要检查代码时可运行 `sh scripts/check.sh`，不会调用模型或 Docker。runtime extra 已安装并锁定；重建时使用 `.tools/uv-package/bin/uv sync --frozen --extra runtime --group data`。检查命令使用 --no-sync 保留已安装的可选依赖。API 操作见 [API_SETUP](docs/API_SETUP.md)；不要把连通成功当作 benchmark 成功。
+需要检查代码时可运行 `sh scripts/check.sh`，不会调用模型或 Docker。现有 63 项测试包含一个[离线链路用例](docs/FULL_CHAIN_CHECK.md)，使用临时玩具文件和报告格式样例，不是 SWE-bench 结果。runtime extra 已安装并锁定；重建时使用 `.tools/uv-package/bin/uv sync --frozen --extra runtime --group data`。检查命令使用 --no-sync 保留已安装的可选依赖。API 操作见 [API_SETUP](docs/API_SETUP.md)；不要把连通成功当作 benchmark 成功。

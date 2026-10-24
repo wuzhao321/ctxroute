@@ -1,6 +1,6 @@
 # ctxroute 阶段报告：代码实现与本地联调
 
-更新：2026-10-23。本报告描述已实现的工程能力和现有证据，不是 SWE-bench 实验结果。
+更新：2026-10-24。本报告描述已实现的工程能力和现有证据，不是 SWE-bench 实验结果。
 
 ## 方法与实现
 
@@ -11,7 +11,7 @@
 ## 已有证据
 
 - 本地依赖与固定 API 短请求：LOCAL_INTEGRATION.md，原始记录在 results/runs/api-probe-*；SDK 首次失败保留，不删除不利记录。
-- 最新代码必要检查：results/validation/memory-workflow/checks.log；离线准备检查：同目录 workflow-preflight.json。单元测试与离线检查不构成任务成功证据。
+- 最新代码必要检查：results/validation/full-chain/checks.log，63 项通过；一个新增离线链路用例的边界见 FULL_CHAIN_CHECK.md。报告和任务均为临时测试样例，不是官方判分，不能构成模型任务成功证据。
 - API 账目沿用 results/validation/runtime-setup/api-summary.json；存在未核实费用预留，真实账单尚未核验。本轮代码工作没有新增模型或云资源调用。
 
 ## 实验结果

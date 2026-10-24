@@ -1,0 +1,25 @@
+{
+  "kind": "offline_chain_contract_not_benchmark",
+  "date": "2026-10-24",
+  "test": "tests/test_full_workflow.py::test_offline_full_chain_and_evidence_guards",
+  "model": "fixed_scripted_responses",
+  "tools": "exact_whitelist_toy_file_operations_no_shell",
+  "grading": "synthetic_report_format_fixture_not_official_harness",
+  "checks": [
+    "toy_file_edit_and_patch",
+    "p1_evidence_quote",
+    "a4_rule_routing",
+    "cleanup",
+    "completed_task_resume_without_repeat",
+    "separate_cohort_exports",
+    "grade_batch_preflight_before_mutation",
+    "report_and_analysis_generation",
+    "changed_predictions_rejected"
+  ],
+  "api_calls": 0,
+  "cloud_resources_created": 0,
+  "docker_executed": false,
+  "official_harness_executed": false,
+  "benchmark_results_available": false,
+  "check_log": "results/validation/full-chain/checks.log"
+}

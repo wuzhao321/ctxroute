@@ -205,7 +205,11 @@ def finalize(root: Path, directory: Path, reports_path: Path, output: Path) -> P
                 raise ValueError("Existing grade refers to a different prediction")
             if report is not None and grade["report_sha256"] != digest(report):
                 raise ValueError("Existing grade refers to a different report")
-        elif report is not None:
+    # Preflight every existing grade before mutating any run. A later mismatch
+    # must not leave an earlier run newly graded after a failed batch import.
+    for run in runs:
+        report = resolved.get(run.name)
+        if not (run / "grade.json").exists() and report is not None:
             import_harness_report(run, report)
     result = write_analysis(runs, output)
     immutable_json(

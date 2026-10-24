@@ -44,3 +44,9 @@ A0 增量检查：ruff/格式检查与 pyright，通过后日志保存在 result
 - 本轮无依赖安装、API 调用、容器、模型任务或正式评测。完整推理到判分的流程仍未实测；实现不能代替效果证据。
 
 接口见 STRUCTURED_MEMORY.md 与 REPRODUCE.md；阶段报告见 REPORT.md。
+
+## 2026-10-24 离线任务链路
+
+一个新增离线集成用例覆盖 A1/A4 玩具任务的固定动作、实际临时文件修改、补丁导出、P1 观察、规则路由升级/降级、任务级续跑、分臂交接、报告格式样例导入、分析报告，以及交接后预测变更拦截。没有调用模型 API 或 shell/Docker/MCP，没有运行官方判分；不验证模型修复能力、压缩效果或隔离实现。
+
+修复全批次 grade 检查先于导入、成本字段回退；报告补充缺失判分与全已启动分母。全部必要离线检查 63 passed，记录见 results/validation/full-chain/checks.log。具体范围见 FULL_CHAIN_CHECK.md。

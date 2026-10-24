@@ -96,7 +96,8 @@ def summarize_run(directory: Path) -> dict[str, Any]:
             raise ValueError("Grade no longer matches predictions")
         resolved = grade["resolved"]
     costs = [
-        float(event.get("cost_upper_usd", event["reserved_usd"])) for event in by_request.values()
+        float(event["cost_upper_usd"] if "cost_upper_usd" in event else event["reserved_usd"])
+        for event in by_request.values()
     ]
     cost_known = bool(by_request) and not unmeasured
     return {
@@ -335,12 +336,13 @@ def write_analysis(run_dirs: list[Path], target: Path, baseline: str = "A1") -> 
         "",
         "费用为含缓存 usage 的高峰价格上界，不代表账单。缺失判分单列；不得据 pilot 声称总体非劣。",
         "",
-        "| 臂 | 已启动 | 已判分 | 已判分 pass@1 | P50 ms | P95 ms |",
-        "|---|---:|---:|---:|---:|---:|",
+        "| 臂 | 已启动 | 已判分 | 缺失判分 | 成功/已启动 | 已判分 pass@1 | P50 ms | P95 ms |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for label, row in summaries.items():
         report.append(
-            f"| {label} | {row['started']} | {row['graded']} | "
+            f"| {label} | {row['started']} | {row['graded']} | {row['missing_grades']} | "
+            f"{row['successes_over_started']} | "
             f"{row['graded_pass_at_1']} | {row['wall_p50_ms']} | {row['wall_p95_ms']} |"
         )
     report.extend(
@@ -348,6 +350,8 @@ def write_analysis(run_dirs: list[Path], target: Path, baseline: str = "A1") -> 
             "",
             "逐实例证据见 runs.csv；配对 CI、缺失原因和统计检验见 analysis.json；"
             "人工失败分类见 failure_review.csv。",
+            "成功/已启动保留所有已启动任务为分母；缺失判分不算已证明成功，"
+            "也不直接归类为已判分失败。已判分 pass@1 仅是已返回报告子集的描述。",
             "长轨迹与成功的关系仅可作为观察性分析；recall 工具差异、缓存时段、"
             "执行顺序及不完整配对均是效度限制。",
         ]
