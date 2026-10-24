@@ -39,3 +39,7 @@ API 密钥已由用户本机设置，状态检查只报告 configured。API 联�
 ## 2026-10-24 真实评测兼容性准备
 
 官方 swebench 固定为 3.0.17，替换与冻结旧数据 schema 不兼容的 5.0.2；其余运行 SDK 未改变。新的 uv.lock 记录版本/哈希，CLI 帮助和必要离线检查通过，见 results/validation/live-preflight/。Docker/本地虚拟机仍未安装，无 Linux 主机或云账号，执行位置待用户确定。首个固定 dev 四字段输入已准备，官方判分仍未运行。
+
+## 2026-10-24 本机 ARM64 安装尝试
+
+用户已批准本机 ARM64 小规模评测。Lima 2.2.1 与 Docker CLI 29.6.1 已安装到项目 `.tools`，版本命令通过；Lima 官方发行包 SHA256 校验通过。VM 配置为 VZ/aarch64、4 CPU、8 GiB、120 GiB 稀疏盘上限、无宿主挂载。两个 Ubuntu 启动镜像地址均下载失败，按约定停止重试，VM 状态为 Stopped、Docker socket 不存在；Docker 引擎、容器隔离及 harness 实测仍未完成。安装哈希和失败日志位于 results/validation/live-preflight/，恢复说明见 LOCAL_ARM64.md。未新增 API 或云费用。

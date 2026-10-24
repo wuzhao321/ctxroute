@@ -1,0 +1,7 @@
+time="2026-10-24T09:13:05+08:00" level=info msg="Terminal is not available, proceeding without opening an editor"
+time="2026-10-24T09:13:05+08:00" level=info msg="Starting the instance `ctx` with internal VM driver `vz`"
+time="2026-10-24T09:13:05+08:00" level=info msg="Attempting to download the image" arch=aarch64 digest="sha256:63a93bd5a8d76e33b15ceb5daa3657bd79be804748051ab178e643b0f5da22e7" location="https://cloud-images.ubuntu.com/releases/resolute/release-20260927/ubuntu-26.04-server-cloudimg-arm64.img"
+Downloading the image (ubuntu-26.04-server-cloudimg-arm64.img)
+time="2026-10-24T10:04:00+08:00" level=info msg="Attempting to download the image" arch=aarch64 digest= location="https://cloud-images.ubuntu.com/releases/resolute/release/ubuntu-26.04-server-cloudimg-arm64.img"
+Downloading the image (ubuntu-26.04-server-cloudimg-arm64.img)
+time="2026-10-24T10:19:50+08:00" level=fatal msg="failed to download `https://cloud-images.ubuntu.com/releases/resolute/release-20260927/ubuntu-26.04-server-cloudimg-arm64.img`: read tcp 198.18.0.1:58091->198.18.2.183:443: read: operation timed out\nfailed to download `https://cloud-images.ubuntu.com/releases/resolute/release/ubuntu-26.04-server-cloudimg-arm64.img`: read tcp [2409:8a30:b6de:78e0:b9a8:1b03:3a97:245f]:58633->[2620:2d:4000:1::1a]:443: read: connection reset by peer"

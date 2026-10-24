@@ -24,8 +24,15 @@
   "hard_limit_usd": "10",
   "price_snapshot": "data/prices/2026-10-24.json",
   "invoice_verified": false,
-  "execution_environment_confirmed": false,
+  "execution_environment_confirmed": true,
   "inference_started": false,
   "harness_grading_started": false,
-  "blocker": "Need execution location: original development-only M5 constraint versus no x86_64 host/account"
+  "blocker": "Ubuntu boot image download failed at both official URLs; stopped after two failures",
+  "execution_environment": "local_arm64_lima_vz_no_cloud",
+  "docker_cli_version": "29.6.1",
+  "lima_version": "2.2.1",
+  "vm_status": "Stopped",
+  "docker_engine_available": false,
+  "installation_evidence": "local-tools.json",
+  "vm_evidence": "lima-status.json"
 }

@@ -98,3 +98,9 @@ A0 仅实现原版证据导入与配置，原版付费执行接入及 A0/A1 一�
 发现原已安装 swebench 5.0.2 与冻结数据格式不兼容：仅查看 Parquet 列名确认缺 image、eval_script、log_parser、eval_type。为保留原始数据而固定官方 swebench 3.0.17；其源码从旧字段构建测试规范，官方 CLI --help 已通过。PyPI 项目元数据指向 SWE-bench 官方仓库，依赖精确版本和包哈希更新至 uv.lock。没有运行 gold patch 验证或判分。
 
 新增 prepare_dev_tasks.py，仅投影四个允许字段，按固定 dev 前缀导出，原始 Parquet SHA-256 与冻结值一致。首个实例 sympy__sympy-22840 的 Agent 输入已保存到忽略目录，下载缓存已删除；未解码参考补丁或隐藏测试列。官方价格 2026-10-24 重新核验，与前一日相同，保存新快照。benchmark runtime 继续 offline_only，待隔离环境与镜像审计通过后才开启。准备状态见 results/validation/live-preflight/。
+
+## 2026-10-24 本机 ARM64 执行获批
+
+用户回复“允许本机 ARM64 小规模评测（不租云主机）”，覆盖之前仅开发的架构约束。选择项目级 Lima 原生 VZ Linux 虚拟机承载 Docker；不挂载宿主目录，不租云。目标资源 4 vCPU、8 GiB RAM、120 GiB 稀疏磁盘，任务仍单并发、2 CPU/4 GiB。安装与环境验收尚在进行，真实推理与判分尚未启动。累计费用不重置，保留未知调用的 0.10 USD 预留。
+
+安装结果：Lima 2.2.1 官方包校验通过，Docker CLI 29.6.1 可运行。Ubuntu 固定日期镜像下载超时，Lima 自动回退的滚动镜像连接中断；按两次失败停止约定未作第三次尝试。`--timeout=10m` 未约束启动前镜像下载，后续必须单独设置下载墙钟上限。VM 只读检查为 Stopped，无 Docker socket、无宿主挂载；不将客户端安装或配置创建称作隔离验收通过。运行模式继续 offline_only。具体记录见 LOCAL_ARM64.md 与 live-preflight 证据。

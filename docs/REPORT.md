@@ -13,6 +13,7 @@
 - 本地依赖与固定 API 短请求：LOCAL_INTEGRATION.md，原始记录在 results/runs/api-probe-*；SDK 首次失败保留，不删除不利记录。
 - 最新代码必要检查：results/validation/full-chain/checks.log，63 项通过；一个新增离线链路用例的边界见 FULL_CHAIN_CHECK.md。报告和任务均为临时测试样例，不是官方判分，不能构成模型任务成功证据。
 - API 账目沿用 results/validation/runtime-setup/api-summary.json；存在未核实费用预留，真实账单尚未核验。本轮代码工作没有新增模型或云资源调用。
+- 用户已批准本机 ARM64 dev 评测；Lima 2.2.1 与 Docker CLI 29.6.1 安装完成。Ubuntu 镜像下载两次失败后停止，VM 为 Stopped、Docker socket 不存在；因此仍未开始推理或判分。本次只做 shell 入口语法、版本与 VM 状态检查，没有扩展测试矩阵。安装与失败证据在 results/validation/live-preflight/，恢复条件见 LOCAL_ARM64.md。
 
 ## 实验结果
 
