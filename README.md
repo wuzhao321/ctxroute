@@ -2,7 +2,7 @@
 
 面向软件工程 Agent 的结构化上下文压缩与步骤级模型路由实验框架。
 
-当前已编写 A0 原生执行适配及 A1–A5 核心循环、压缩与路由、沙箱/MCP 适配、预算和 trace，以及批量调度、消融和统计分析代码。按用户最新要求，**已完成本地运行依赖安装与 HTTP/PydanticAI API 联调，评测保持暂停**。API 预算开关已开启，benchmark runtime 仍为 offline_only，没有实验效果数据。详见 [本地联调记录](docs/LOCAL_INTEGRATION.md)。
+当前已编写 A0 原生执行适配及 A1–A5 核心循环、压缩与路由、沙箱/MCP 适配、预算和 trace，以及批量调度、消融和统计分析代码。已完成本地运行依赖安装与 HTTP/PydanticAI API 联调。**2026-10-24 已恢复真实评测准备，执行位置待确定**；已固定兼容数据的官方 harness 3.0.17，并提取首个 dev 四字段输入。API 预算开关已开启，benchmark runtime 仍为 offline_only，没有实验效果数据。详见 [本地联调记录](docs/LOCAL_INTEGRATION.md)。
 
 架构与实现边界见 [ARCHITECTURE](docs/ARCHITECTURE.md)，功能状态见 [IMPLEMENTATION_STATUS](docs/IMPLEMENTATION_STATUS.md)。预算保持 API 与云资源合计最多 10 USD，8 USD 暂停，不训练模型。
 

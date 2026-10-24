@@ -17,7 +17,7 @@ runtime = [
     "mcp>=1,<2",
     "mini-swe-agent==2.4.6",
     "pydantic-ai-slim[openai]>=2.59.0",
-    "swebench>=5.0.2",
+    "swebench==3.0.17",
 ]
 
 [dependency-groups]

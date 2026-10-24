@@ -20,3 +20,7 @@ results/budget/*.sqlite*
 # Preserve manifests, traces, predictions and evaluation evidence by default.
 
 artifacts/demos/
+
+# Sanitized runtime inputs and environment-specific registries stay local.
+data/private/
+configs/private/

@@ -1,0 +1,24 @@
+{
+  "source_sha256": "7a21f37b8bc179c7db5beeb14e88ac538ba283455c776e6b2535bbfb6e3551b4",
+  "column_names": [
+    "repo",
+    "instance_id",
+    "base_commit",
+    "patch",
+    "test_patch",
+    "problem_statement",
+    "hints_text",
+    "created_at",
+    "version",
+    "FAIL_TO_PASS",
+    "PASS_TO_PASS",
+    "environment_setup_commit"
+  ],
+  "swebench_5_required_missing": [
+    "eval_script",
+    "eval_type",
+    "image",
+    "log_parser"
+  ],
+  "decoded_rows": 0
+}

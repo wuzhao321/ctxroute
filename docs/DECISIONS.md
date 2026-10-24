@@ -90,3 +90,11 @@ A0 仅实现原版证据导入与配置，原版付费执行接入及 A0/A1 一�
 修复批量报告导入的检查顺序：全部已有 grade 的预测和报告哈希通过后，才导入尚未导入的报告；检查失败不再先写入其他任务的 grade。修复成本字段的惰性回退，避免已有 cost_upper_usd 时仍提前访问缺失的 reserved_usd。分析报告同时展示缺失判分、成功/已启动及已判分子集比例，避免隐去未判分分母。
 
 必要检查最终 63 passed（原 62 项加 1 个链路用例），ruff/format 与 pyright 通过。本轮无 API、云资源、Docker、官方判分；真实环境的完整端到端验证仍待执行。
+
+## 2026-10-24 恢复真实评测准备
+
+用户授权开启真实评测并开展所需工作，覆盖此前暂停安装/API/评测的要求，预算与 dev/test 边界不变。检查确认本机没有 Docker/Colima/Lima/Homebrew，未配置 Linux 主机或云账号；已有 key 可用。此前 M5 仅开发的约定仍需明确是否允许改为本机 ARM64 单并发冒烟，已发起执行位置选择，尚未创建资源。
+
+发现原已安装 swebench 5.0.2 与冻结数据格式不兼容：仅查看 Parquet 列名确认缺 image、eval_script、log_parser、eval_type。为保留原始数据而固定官方 swebench 3.0.17；其源码从旧字段构建测试规范，官方 CLI --help 已通过。PyPI 项目元数据指向 SWE-bench 官方仓库，依赖精确版本和包哈希更新至 uv.lock。没有运行 gold patch 验证或判分。
+
+新增 prepare_dev_tasks.py，仅投影四个允许字段，按固定 dev 前缀导出，原始 Parquet SHA-256 与冻结值一致。首个实例 sympy__sympy-22840 的 Agent 输入已保存到忽略目录，下载缓存已删除；未解码参考补丁或隐藏测试列。官方价格 2026-10-24 重新核验，与前一日相同，保存新快照。benchmark runtime 继续 offline_only，待隔离环境与镜像审计通过后才开启。准备状态见 results/validation/live-preflight/。

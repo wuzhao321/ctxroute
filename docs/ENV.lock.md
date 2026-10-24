@@ -35,3 +35,7 @@ uv 0.13.5 在 .tools/uv-package；.venv 使用 Python 3.12.14。uv.lock 锁定�
 已确认 SDK 导入、上游 mini-swe-agent 关键源码哈希、真实 MCP stdio initialize/list_tools 四方法、官方 harness --help。没有调用沙箱工具或运行判分。记录见 results/validation/runtime-setup/。本轮必要检查修正了依赖运行配置的旧测试夹具，最终 62 passed、ruff 与 pyright 通过；未增加测试矩阵。
 
 API 密钥已由用户本机设置，状态检查只报告 configured。API 联调结果后续单独记录；不能据 SDK 导入推断调用成功。
+
+## 2026-10-24 真实评测兼容性准备
+
+官方 swebench 固定为 3.0.17，替换与冻结旧数据 schema 不兼容的 5.0.2；其余运行 SDK 未改变。新的 uv.lock 记录版本/哈希，CLI 帮助和必要离线检查通过，见 results/validation/live-preflight/。Docker/本地虚拟机仍未安装，无 Linux 主机或云账号，执行位置待用户确定。首个固定 dev 四字段输入已准备，官方判分仍未运行。

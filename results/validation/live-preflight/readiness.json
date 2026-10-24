@@ -1,0 +1,31 @@
+{
+  "date": "2026-10-24",
+  "kind": "live_evaluation_preflight_not_benchmark",
+  "machine_arch": "arm64",
+  "free_disk_gib": 876.2,
+  "docker_available": false,
+  "linux_host_configured": false,
+  "cloud_account_available": false,
+  "harness_version": "3.0.17",
+  "harness_cli_help_passed": true,
+  "frozen_instance": "sympy__sympy-22840",
+  "task_input_ready": true,
+  "planned_arm_order": [
+    "A0",
+    "A1",
+    "A2",
+    "A3",
+    "A4"
+  ],
+  "planned_max_model_allowance_usd": "1.00",
+  "usage_calculated_usd": "0.0000036",
+  "unsettled_reservation_usd": "0.10",
+  "pause_at_usd": "8",
+  "hard_limit_usd": "10",
+  "price_snapshot": "data/prices/2026-10-24.json",
+  "invoice_verified": false,
+  "execution_environment_confirmed": false,
+  "inference_started": false,
+  "harness_grading_started": false,
+  "blocker": "Need execution location: original development-only M5 constraint versus no x86_64 host/account"
+}
