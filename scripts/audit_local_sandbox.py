@@ -18,6 +18,9 @@ from ctxroute.tools.mcp_client import McpSandbox, StdioClient
 def main() -> None:
     root = Path(__file__).resolve().parents[1]
     out = root / "results/validation/live-preflight"
+    out.mkdir(parents=True, exist_ok=True)
+    private = root / "results/private"
+    private.mkdir(parents=True, exist_ok=True)
     registry_path = root / "configs/private/images.json"
     registry = json.loads(registry_path.read_text())
     tasks_path = root / "data/private/dev-smoke.jsonl"
@@ -31,7 +34,7 @@ def main() -> None:
     handles = []
     mcp = None
     mcp_handle = None
-    audit_root = tempfile.TemporaryDirectory(dir=root / "results/private", prefix="mcp-audit-")
+    audit_root = tempfile.TemporaryDirectory(dir=private, prefix="mcp-audit-")
     try:
         start = time.monotonic()
         handle = sandbox.create(task)
@@ -57,7 +60,7 @@ def main() -> None:
         )
         command = """python - <<'PY'
 import os, socket, sys
-assert not os.path.exists('/Users/wuzhaowei')
+assert not os.path.exists('/Users')
 assert not os.path.exists('/var/run/docker.sock')
 assert not os.path.exists('/eval.sh')
 assert not os.path.exists('/patch.diff')
@@ -103,7 +106,7 @@ PY"""
         finally:
             limited.destroy(limited_handle)
         # Permit only the sandbox service in a temporary configuration root. The
-        # production runtime stays offline and no model or credential code is loaded.
+        # production runtime is unchanged and no model or credential code is loaded.
         audit_configs = Path(audit_root.name) / "configs"
         audit_configs.mkdir()
         (audit_configs / "runtime.json").write_text(json.dumps({"execution_mode": "live"}))

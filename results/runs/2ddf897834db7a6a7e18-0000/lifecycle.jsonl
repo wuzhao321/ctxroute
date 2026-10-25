@@ -1,2 +1,0 @@
-{"run_id": "2ddf897834db7a6a7e18-0000", "event": "sandbox_created", "create_ms": 97.93570799956797}
-{"run_id": "2ddf897834db7a6a7e18-0000", "event": "native_system_probe", "system": {"system": "Linux", "release": "7.0.0-34-generic", "version": "#34-Ubuntu SMP PREEMPT_DYNAMIC Wed Sep  2 14:34:54 UTC 2026", "machine": "aarch64"}, "rpc_roundtrip_ms": 81.74024999607354}

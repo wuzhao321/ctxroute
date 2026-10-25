@@ -1,55 +1,45 @@
 # ctxroute
 
-面向软件工程 Agent 的结构化上下文压缩与步骤级模型路由实验框架。
+## 项目目的
 
-当前已编写 A0 原生执行适配及 A1–A5 核心循环、压缩与路由、沙箱/MCP 适配、预算和 trace，以及批量调度、消融和统计分析代码。**2026-10-24 已完成本机 ARM64 首题五臂真实 pilot**：A0 上下文耗尽，A1–A4 动作格式失败，全部为空补丁。官方基础设施负对照已执行测试，环境链路可用；没有证明算法有效。见[首轮报告](results/analysis/arm64-smoke-20261024/PILOT_REPORT.md)。本轮 usage 费用约 0.0732 USD，另保留历史未知费用预留 0.10 USD；未核验账单。runtime 为 live，项目 VM 已停止，后续应先修复动作协议并冻结新计划。
+ctxroute 是面向软件工程 Agent 的实验框架，用于研究结构化上下文压缩与步骤级模型路由。它将代码修复任务的执行、上下文管理、模型选择和评测记录组织在统一流程中，便于比较不同策略对任务完成情况、模型调用成本和执行延迟的影响。
 
-架构与实现边界见 [ARCHITECTURE](docs/ARCHITECTURE.md)，功能状态见 [IMPLEMENTATION_STATUS](docs/IMPLEMENTATION_STATUS.md)。预算保持 API 与云资源合计最多 10 USD，8 USD 暂停，不训练模型。
+## 项目内容
 
-## 离线准备命令
+- **Agent 执行与对照策略**：适配 mini-swe-agent 原生执行循环，并提供 A1–A5 配置，覆盖固定模型、结构化压缩、规则路由及组合策略。
+- **上下文与记忆管理**：划分系统任务、固定证据、结构化摘要和近期步骤，支持历史输出存储、证据引用与按需召回。
+- **步骤级模型路由**：依据命令类型、执行结果和连续步骤状态选择模型层级，通过统一接口接入模型服务。
+- **工具与隔离执行**：提供 Docker 沙箱与 MCP 工具接口，管理命令执行、资源限制、补丁提取和容器生命周期；动作协议与进展控制负责校验输出和处理重复动作。
+- **实验编排与分析**：提供实验清单冻结、任务级续跑、费用预留与结算、请求和步骤轨迹、预测导出、SWE-bench 官方判分对接、消融配置和配对统计分析。
 
-使用已有项目 Python 环境，不需要密钥、Docker 或网络：
+## 项目结构与导航
 
-```sh
-.venv/bin/ctxroute status
-.venv/bin/ctxroute experiment plan --arms A0 A1 A2 A3 A4 --count 5 --output results/plans/main.json
-.venv/bin/ctxroute experiment plan --arms A2 A4 --count 5 --truncate --output results/plans/truncate.json
-```
+| 路径 | 内容 |
+|---|---|
+| [src/ctxroute/orchestrator/](src/ctxroute/orchestrator/) | Agent 主循环、终止规则与进展控制 |
+| [src/ctxroute/context/](src/ctxroute/context/) | 上下文分区、结构化记忆、压缩与历史输出召回 |
+| [src/ctxroute/router/](src/ctxroute/router/) | 模型层级选择规则 |
+| [src/ctxroute/models/](src/ctxroute/models/) | 模型请求协议、DeepSeek 与 PydanticAI 传输适配 |
+| [src/ctxroute/baselines/](src/ctxroute/baselines/) | mini-swe-agent 基线适配 |
+| [src/ctxroute/sandbox/](src/ctxroute/sandbox/) / [tools/](src/ctxroute/tools/) | Docker 沙箱与 MCP 客户端、服务端 |
+| [src/ctxroute/tracing/](src/ctxroute/tracing/) | 预算账本、调用成本与运行轨迹 |
+| [src/ctxroute/evalkit/](src/ctxroute/evalkit/) | 实验编排、复现流程、判分交接与统计分析 |
+| [src/ctxroute/cli.py](src/ctxroute/cli.py) | 命令行入口 |
+| [configs/](configs/) | 实验臂、消融、模型运行、预算与沙箱配置 |
+| [data/](data/) | 数据划分与版本化模型价格表 |
+| [scripts/](scripts/) | 数据准备、环境工具与评测辅助脚本 |
+| [tests/](tests/) | 核心模块和工作流测试 |
+| [pyproject.toml](pyproject.toml) / [uv.lock](uv.lock) | 项目依赖、工具配置与依赖锁定 |
 
-清单只写入固定任务 ID、参数和哈希，不加载题目、不执行任务，也不授权付费。输出文件不可覆盖。改变参数后需要新清单。当前 pilot 的数量和 seed 限制沿用预注册；test 暂不开放。
+运行时生成的清单、轨迹、预测和分析报告保存在本地 `results/`，不纳入版本控制。
 
-## 本轮代码补齐
-
-结构化记忆已升级为带路径/行范围、退出码、假设状态和证据引用的 v2；P1 支持精确引用历史工具观察，详见 [记忆接口](docs/STRUCTURED_MEMORY.md)。[分阶段复现入口](docs/REPRODUCE.md) 串联准备、推理、预测交接和报告分析。`make reproduce` 默认仅准备已有清单，推理需另选阶段及显式执行；判分保持在独立环境。阶段总结见 [REPORT](docs/REPORT.md)。
-
-## 已编写的后续执行入口
-
-以下用于说明代码接口；带 `--execute` 的推理命令在引擎就绪时会真实调用 API 并计费。本轮首题已运行，不覆盖或重跑原清单。
-
-```sh
-# tasks.jsonl 必须是去除答案字段后的四字段输入；images.json 映射 instance_id 到镜像摘要。
-.venv/bin/ctxroute experiment run --plan results/plans/main.json --tasks data/private/tasks.jsonl --images configs/private/images.json --execute
-
-# 每次导出只含一个 arm、variant、seed。
-.venv/bin/ctxroute experiment export --runs results/runs/RUN_ID --output results/predictions.jsonl
-.venv/bin/ctxroute experiment harness-command --plan results/plans/main.json --predictions results/predictions.jsonl --run-id GRADING_RUN_ID
-
-# harness-command 只打印 argv，官方 harness 须在独立判分环境执行。
-.venv/bin/ctxroute experiment import-grade --run results/runs/RUN_ID --report PATH_TO_OFFICIAL_REPORT
-.venv/bin/ctxroute experiment analyze --runs results/runs/RUN_ID --output results/analysis/report
-```
-
-`run` 支持任务级续跑；中断任务不会自动重新付费。`analyze` 生成 runs.jsonl、runs.csv、analysis.json、failure_review.csv 和 REPORT.md；配对比较需要多个臂和相同实例/seed 的有效证据。费用为含缓存的 usage 成本上界，真实账单另行对账。合成运行不会进入正式分析或预测导出。
-
-A0 已接入统一运行入口，保留上游原生文本循环并替换模型/沙箱 I/O，详见 [A0 接入说明](docs/A0_ADAPTER.md)。真实联调和 A0/A1 一致性未验证；独立证据仍可通过 `experiment import-baseline --source DIR --run-id ID` 导入。A6/A7、学习路由、本地模型按计划后置。可选 `experiment plot --analysis DIR --output FIGURE.png` 使用 matplotlib，本轮未安装或运行。
-
-## 代码与证据
-
-- [预注册](docs/PREREG.md)、[冻结划分](data/split.json)：dev/test 分离与固定 pilot 顺序。
-- [决策记录](docs/DECISIONS.md)：用户范围调整、实现偏差与历史记录。
-- [Claims Ledger](docs/CLAIMS.md)：效果指标继续标记未测。
-- `configs/arms/`：A0–A7 定义；`configs/ablations/`：A2/A4 截断消融。
-- `src/ctxroute/`：完整模块划分见架构文档。
-- `tests/`：已有离线测试。本轮不扩展验证矩阵、不运行模拟实验。
-
-需要检查代码时可运行 `sh scripts/check.sh`，不会调用模型或 Docker。现有 63 项测试包含一个[离线链路用例](docs/FULL_CHAIN_CHECK.md)，使用临时玩具文件和报告格式样例，不是 SWE-bench 结果。runtime extra 已安装并锁定；重建时使用 `.tools/uv-package/bin/uv sync --frozen --extra runtime --group data`。检查命令使用 --no-sync 保留已安装的可选依赖。API 操作见 [API_SETUP](docs/API_SETUP.md)；不要把连通成功当作 benchmark 成功。
+| 文档 | 查看内容 |
+|---|---|
+| [ARCHITECTURE](docs/ARCHITECTURE.md) | 整体架构、模块职责与数据流 |
+| [API_SETUP](docs/API_SETUP.md) | 模型服务配置与密钥设置 |
+| [REPRODUCE](docs/REPRODUCE.md) | 准备、推理、导出和分析流程 |
+| [PREREG](docs/PREREG.md) | 实验设计与清单冻结规则 |
+| [A0_ADAPTER](docs/A0_ADAPTER.md) | 原生基线的接入方式与接口边界 |
+| [STRUCTURED_MEMORY](docs/STRUCTURED_MEMORY.md) | 记忆结构、证据引用与校验规则 |
+| [ACTION_PROTOCOL](docs/ACTION_PROTOCOL.md) | 动作格式、解析与纠错机制 |
+| [PROGRESS_CONTROL](docs/PROGRESS_CONTROL.md) | 进展反馈、重复动作检测与停止规则 |

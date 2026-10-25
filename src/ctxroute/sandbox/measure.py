@@ -19,7 +19,7 @@ def compare_transports(
     execute: bool = False,
 ) -> dict[str, Any]:
     if not execute:
-        raise RuntimeError("Sandbox timing is paused with all other measurements")
+        raise RuntimeError("Sandbox timing requires execute=True")
     if not 1 <= repetitions <= 100:
         raise ValueError("Repetitions must be between 1 and 100")
     rows: list[dict[str, Any]] = []

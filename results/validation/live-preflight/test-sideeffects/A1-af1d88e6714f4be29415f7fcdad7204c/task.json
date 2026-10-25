@@ -1,6 +1,0 @@
-{
-  "instance_id": "synthetic-1",
-  "repo": "fake/repo",
-  "base_commit": "fixture",
-  "problem_statement": "Fix the synthetic issue"
-}

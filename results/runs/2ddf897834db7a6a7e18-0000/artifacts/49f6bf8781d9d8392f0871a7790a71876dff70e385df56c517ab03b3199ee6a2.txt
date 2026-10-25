@@ -1,9 +1,0 @@
-def test_cse_MatrixSymbol():
-    # MatrixSymbols have non-Basic args, so make sure that works
-    A = MatrixSymbol("A", 3, 3)
-    assert cse(A) == ([], [A])
-
-    n = symbols('n', integer=True)
-    B = MatrixSymbol("B", n, n)
-    assert cse(B) == ([], [B])
-

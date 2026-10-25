@@ -1,2 +1,0 @@
-569:    from sympy.matrices.expressions import MatrixExpr, MatrixSymbol, MatMul, MatAdd
-675:                sym = MatrixSymbol(sym.name, orig_expr.rows,

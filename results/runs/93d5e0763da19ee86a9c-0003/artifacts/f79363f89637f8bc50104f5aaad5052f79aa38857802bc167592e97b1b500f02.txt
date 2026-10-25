@@ -1,7 +1,0 @@
-sympy/simplify/cse_main.py:64:def cse_separate(r, e):
-sympy/simplify/cse_main.py:90:def cse_release_variables(r, e):
-sympy/simplify/cse_main.py:695:def cse(exprs, symbols=None, optimizations=None, postprocess=None,
-sympy/codegen/ast.py:745:    def cse(self, symbols=None, optimizations=None, postprocess=None,
-sympy/simplify/cse_main.py:64:def cse_separate(r, e):
-sympy/simplify/cse_main.py:90:def cse_release_variables(r, e):
-sympy/simplify/cse_main.py:695:def cse(exprs, symbols=None, optimizations=None, postprocess=None,

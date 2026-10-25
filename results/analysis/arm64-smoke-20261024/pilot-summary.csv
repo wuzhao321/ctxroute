@@ -1,6 +1,0 @@
-arm,run_id,termination,steps,model_requests,usage_cost_usd,peak_upper_usd,wall_seconds,empty_patches,resolved,test_completed,infrastructure_errors,compressions,tier_requests
-A0,93d5e0763da19ee86a9c-0000,context_limit,26,25,0.028336704,0.056673408,83.2913,1,0,0,0,0,{'strong': 25}
-A1,93d5e0763da19ee86a9c-0001,format_failure,15,15,0.015392828,0.030785656,42.564494,1,0,0,0,0,{'strong': 15}
-A2,93d5e0763da19ee86a9c-0002,format_failure,13,13,0.011823680,0.023647360,33.31798,1,0,0,0,0,{'strong': 13}
-A3,93d5e0763da19ee86a9c-0003,format_failure,17,17,0.014036572,0.028073144,45.169825,1,0,0,0,0,{'strong': 17}
-A4,93d5e0763da19ee86a9c-0004,format_failure,6,6,0.003575484,0.007150968,17.998594,1,0,0,0,0,{'strong': 6}

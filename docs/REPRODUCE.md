@@ -1,61 +1,77 @@
-# 分阶段复现入口
+# 实验执行与复现
 
-入口统一准备、推理、预测交接与分析。2026-10-24 首题 ARM64 pilot 已运行，实际清单位于 results/plans/arm64-smoke-20261024.json。当前 runtime 为 live，VM 已停止；下面是接口模板，不能覆盖首轮结果。后续实现修改后需新建计划。
+实验分为准备、推理、预测交接、独立判分和分析。运行前需安装锁定依赖，配置模型密钥、价格快照、预算及隔离执行环境。模型配置见 [API_SETUP](API_SETUP.md)，比较与停止规则见 [PREREG](PREREG.md)。
 
-## 1. 固定清单与准备
+以下命令从项目根目录执行，路径为示例；每次配置或源码变更应使用新的计划与输出目录。
 
-```sh
-.venv/bin/ctxroute experiment plan --arms A0 A1 A2 A3 A4 --count 5 --output results/plans/pilot-v2.json
-.venv/bin/ctxroute experiment reproduce prepare --plan results/plans/pilot-v2.json --workflow results/workflows/pilot-v2
-```
-
-准备阶段只读已冻结的计划并写 workflow.json，不读取密钥或题目，不创建预算账本。按 arm、variant、seed 分组，所有计划任务都保留。相同内容可重复准备，已有不同内容禁止覆盖。代码或运行配置改变后必须生成新计划及新 workflow，包括从 offline_only 切换到 live 的情况。
-
-## 2. 推理（显式付费执行）
+## 1. 冻结计划
 
 ```sh
-.venv/bin/ctxroute experiment reproduce infer --workflow results/workflows/pilot-v2 --tasks data/private/tasks.jsonl --images configs/private/images.json --execute
+.venv/bin/ctxroute experiment plan --arms A0 A1 A2 A3 A4 --count 1 --output results/plans/dev-pilot.json
+.venv/bin/ctxroute experiment reproduce prepare --plan results/plans/dev-pilot.json --workflow results/workflows/dev-pilot
 ```
 
-需要 live 配置、启用预算、可用的隔离环境、完整任务白名单和镜像摘要。沿用既有任务级续跑及费用预留，不自动重试中断任务，不放宽预算。此命令不判分；Agent 进程不读取判分报告。
+计划冻结划分、实验协议、配置、价格和源码指纹。准备阶段按 `arm`、`variant`、`seed` 分组并写入 `workflow.json`，不读取密钥或发送请求。相同内容可以重复准备，不同内容禁止覆盖。
 
-## 3. 预测交接
+当前计划器仅接受 `data/split.json` 中 dev 前 1–5 项、固定 seed 和 A0–A5；A2/A4 可选择 `--truncate` 生成消融计划。它不提供正式 test 或多 seed 调度。
+
+## 2. 准备输入与镜像
+
+任务 JSONL 每行只能包含：
+
+```json
+{"instance_id":"example__project-1","repo":"example/project","base_commit":"COMMIT_SHA","problem_statement":"Issue description"}
+```
+
+实际实例必须与计划完全匹配，不得包含 gold patch、测试补丁或判分字段。镜像映射格式由 [`evalkit/cli.py`](../src/ctxroute/evalkit/cli.py) 的注册表读取逻辑定义，镜像需固定摘要，并满足 [`sandbox/docker.py`](../src/ctxroute/sandbox/docker.py) 的隔离约束。
+
+工具镜像与判分环境分离；构建镜像、安装依赖或下载数据由独立准备流程完成，执行入口不会自动创建云资源。
+
+## 3. 显式执行推理
 
 ```sh
-.venv/bin/ctxroute experiment reproduce export --workflow results/workflows/pilot-v2
+.venv/bin/ctxroute experiment reproduce infer --workflow results/workflows/dev-pilot --tasks data/private/tasks.jsonl --images configs/private/images.json --execute
 ```
 
-全部计划任务必须有完成 manifest 和对应的预测；运行身份必须匹配计划。空补丁、预算终止及失败任务均保留，未开始/中断任务阻止交接，不悄悄缩减集合。
+需要 runtime 的 `execution_mode=live`、启用预算、有效价格快照和可用沙箱。请求派发前预留最坏费用，开始同一实例时检查其剩余各臂的完整额度。
 
-每个 arm/variant/seed 单独导出 predictions/*.jsonl；handoff.json 记录每个原始预测与导出文件的 SHA-256、唯一 grading_run_id，以及官方 harness 的 argv。该阶段不执行 argv。独立判分环境从项目根目录执行这些命令，并保留官方日志与版本；预测文件须按交接中的相对路径复制，不能把旧 grading_run_id 用于不同补丁。环境安装、镜像构建及资源费用不由此命令自动处理。
+恢复以任务为单位：完成任务跳过；中断任务保留证据与未结算预留，禁止自动重跑。失败、空补丁、预算终止均保留，不据结果替换实例。
 
-## 4. 官方报告导入与分析
+## 4. 导出预测与独立判分
 
-将官方每实例 report.json 放入本项目的 results/private/，创建 JSON 映射：
+```sh
+.venv/bin/ctxroute experiment reproduce export --workflow results/workflows/dev-pilot
+```
+
+所有计划任务必须有完成 manifest 和匹配预测。每个 `arm/variant/seed` 单独导出 `predictions/*.jsonl`；`handoff.json` 记录原始及合并预测哈希、唯一 `grading_run_id` 和官方 harness 命令参数。导出阶段不会运行判分。
+
+在独立判分环境中，使用交接记录中的命令与预测执行官方 SWE-bench harness，保留版本、run ID 和日志。改变补丁必须使用新判分 ID。空补丁和失败任务仍属于导出集合，官方可能不会为其生成逐实例测试报告。
+
+## 5. 导入报告并分析
+
+将官方逐实例报告存入本地 `results/private/`，建立推理 `run_id` 到报告路径的 JSON 映射：
 
 ```json
 {
-  "计划ID-0000": "results/private/grading/A0/实例ID/report.json",
-  "计划ID-0001": "results/private/grading/A1/实例ID/report.json"
+  "PLAN_ID-0000": "results/private/grading/A0/example__project-1/report.json",
+  "PLAN_ID-0001": "results/private/grading/A1/example__project-1/report.json"
 }
 ```
 
-键必须为计划对应的推理 run_id；报告内容须为官方的实例 ID → resolved 布尔值格式。操作者仍需核对报告的 grading_run_id、补丁与官方日志；结构和哈希校验不等于认证报告来源。
+报告格式为实例 ID 到包含布尔值 `resolved` 的对象映射。导入前核对官方 run ID、补丁与日志；文件结构和哈希不能认证报告来源。未返回的逐实例报告可以不出现在映射中，分析保留缺失项，必要时结合官方汇总说明空补丁分类。
 
 ```sh
-.venv/bin/ctxroute experiment reproduce analyze --workflow results/workflows/pilot-v2 --reports results/private/reports.json --output results/analysis/pilot-v2
+.venv/bin/ctxroute experiment reproduce analyze --workflow results/workflows/dev-pilot --reports results/private/reports.json --output results/analysis/dev-pilot
 ```
 
-导入前检查预测没有偏离交接哈希。已导入的相同报告可以复用，变化的报告不能覆盖原 grade；已有分析目录不能覆盖。映射可缺少未返回的判分，缺失项保留为未测。输出 runs.csv、analysis.json、REPORT.md、failure_review.csv 及 workflow-provenance.json。失败分类仍需人工填写；绘图继续使用可选 plot 命令，不自动安装绘图库。
+分析核对交接哈希，导入 `grade.json` 并输出 `runs.csv`、`analysis.json`、`REPORT.md`、`failure_review.csv` 和 `workflow-provenance.json`。相同报告可复用，不同报告不能覆盖已导入判分；已有分析目录不能覆盖。失败分类需要根据轨迹填写，可选绘图使用 `experiment plot`。
 
-Makefile 对应入口：`make reproduce ARM=A4 STAGE=prepare`，默认只准备已有 PLAN；推理须显式使用 `STAGE=infer EXECUTE=--execute`。PLAN、WORKFLOW、TASKS、IMAGES、REPORTS、OUTPUT 均可覆盖。当前支持固定 dev pilot，未开放正式 test 或多 seed 调度。
-
-## 2026-10-25 同题复测记录
-
-新计划 results/plans/arm64-json-v2-20261025.json，workflow 同名目录。grade_local_pilot.py 现将私有报告写入 results/private/harness/{plan_id}/reports.json，避免覆盖前次映射。汇总脚本现要求显式路径：
+## Makefile
 
 ```sh
-.venv/bin/python scripts/summarize_local_pilot.py --workflow results/workflows/arm64-json-v2-20261025 --output results/analysis/new-summary-directory --prior-plan-id 93d5e0763da19ee86a9c
+make plan ARM=A4 COUNT=1
+make reproduce ARM=A4 STAGE=prepare
+make reproduce ARM=A4 STAGE=infer EXECUTE=--execute
 ```
 
-输出目录内已有 pilot-summary.json 或 PILOT_REPORT.md 时拒绝覆盖。真实结果和下一阶段重点见 results/analysis/arm64-json-v2-20261025/RETEST_REVIEW.md。
+`PLAN`、`WORKFLOW`、`TASKS`、`IMAGES`、`REPORTS`、`OUTPUT` 均可覆盖。默认 `STAGE=prepare`；推理必须显式提供执行参数。

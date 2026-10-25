@@ -30,9 +30,11 @@ def main() -> None:
     summaries = output / "official-summaries"
     summaries.mkdir(exist_ok=True)
     rows = []
+    instances = set()
     for receipt in receipts:
         run = root / "results/runs" / receipt["inference_run_id"]
         manifest = json.loads((run / "manifest.json").read_text())
+        instances.add(manifest["instance_id"])
         content = (root / receipt["official_summary"]).read_bytes()
         if hashlib.sha256(content).hexdigest() != receipt["official_summary_sha256"]:
             raise ValueError("Official summary changed")
@@ -88,6 +90,9 @@ def main() -> None:
                 "tier_requests": dict(Counter(r["tier"] for r in usage)),
             }
         )
+    if len(instances) != 1:
+        raise ValueError("This summary requires exactly one task instance")
+    instance_id = next(iter(instances))
     control_path = workflow_dir / "negative-control.json"
     if control_path.exists():
         control = json.loads(control_path.read_text())
@@ -100,12 +105,10 @@ def main() -> None:
         "kind": "dev_pilot_official_summary_reconciliation",
         "plan_id": workflow["plan_id"],
         "prior_plan_id": args.prior_plan_id,
-        "instance_id": "sympy__sympy-22840",
+        "instance_id": instance_id,
         "arms": rows,
         "new_usage_cost_usd": str(total),
         "invoice_verified": False,
-        "unknown_prior_reservation_usd": "0.10",
-        "new_cloud_cost_usd": "0",
         "negative_control_excluded_from_model_results": True,
         "negative_control_run_in_this_batch": control_path.exists(),
         "note": (
@@ -120,9 +123,9 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(rows)
     lines = [
-        "# 固定首题 dev pilot：运行结果与官方汇总",
+        "# Dev pilot：运行结果与官方汇总",
         "",
-        "固定实例 sympy__sympy-22840；ARM64；每臂 1 次，顺序 A0→A4。正式 test 未测。",
+        f"实例 {instance_id}；执行臂顺序：{' → '.join(row['arm'] for row in rows)}。",
         "",
         "| 臂 | 终止原因 | 步数 | API 请求 | usage 费用 USD | 用时秒 | 官方空补丁 | 成功 |",
         "|---|---|---:|---:|---:|---:|---:|---:|",
@@ -136,8 +139,7 @@ def main() -> None:
     lines.extend(
         [
             "",
-            f"本轮含缓存 usage 费用合计 {total} USD，全部请求记录为 off_peak；未核验供应商账单。",
-            "历史未知调用的 0.10 USD 预留继续保留，云费用为 0。",
+            f"含缓存 usage 费用合计 {total} USD，全部请求记录为 off_peak；未核验供应商账单。",
             "",
             f"官方汇总：空补丁 {sum(r['empty_patches'] for r in rows)}，"
             f"完成测试 {sum(r['test_completed'] for r in rows)}，"
@@ -152,7 +154,7 @@ def main() -> None:
             "仅同一实例的开发诊断，不能支持总体收益或非劣结论。"
             "复测不能与首轮合并为独立样本；原始失败结果继续保留。",
             "",
-            f"本轮计划 {workflow['plan_id']}；前序计划 {args.prior_plan_id or '无'}。",
+            f"计划 {workflow['plan_id']}；前序计划 {args.prior_plan_id or '无'}。",
             "通用 REPORT.md 的缺失判分表示无逐实例测试报告；"
             "本文件结合 official-summaries/ 区分了官方空补丁分类。",
         ]

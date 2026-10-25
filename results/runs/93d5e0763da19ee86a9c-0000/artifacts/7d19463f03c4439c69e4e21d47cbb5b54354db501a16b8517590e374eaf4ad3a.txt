@@ -1,2 +1,0 @@
-sympy/codegen/ast.py
-sympy/simplify/cse_main.py

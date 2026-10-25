@@ -1,8 +1,0 @@
-cse(e):
-([], [a*b])
-cse(e, order='none'):
-([], [a*b])
-cse(e, list=False):
-([], a*b)
-cse(e, list=False, order='none'):
-([], a*b)

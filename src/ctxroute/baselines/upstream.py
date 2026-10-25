@@ -26,7 +26,7 @@ def load_native(root: Path) -> NativeAPI:
         version = metadata.version("mini-swe-agent")
     except metadata.PackageNotFoundError:
         raise RuntimeError(
-            "mini-swe-agent is not installed; environment setup remains deferred"
+            "mini-swe-agent is not installed; install the runtime dependencies"
         ) from None
     if version != policy["upstream_version"]:
         raise RuntimeError("Installed mini-swe-agent version differs from the frozen baseline")

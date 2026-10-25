@@ -51,6 +51,7 @@ def main() -> None:
         "invoice_verified": False,
     }
     output = root / "results/validation/runtime-setup/api-summary.json"
+    output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n")
     print(json.dumps(summary, ensure_ascii=False, indent=2))
 

@@ -1,24 +1,0 @@
-Building base image (sweb.base.py.arm64:latest)
-Base images built successfully.
-Total environment images to build: 1
-  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [01:28<00:00, 88.80s/it]1 ran successfully, 0 failed: 100%|██████████| 1/1 [01:28<00:00, 88.80s/it]1 ran successfully, 0 failed: 100%|██████████| 1/1 [01:28<00:00, 88.80s/it]
-All environment images built successfully.
-Building instance images for 1 instances
-  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:28<00:00, 28.18s/it]1 ran successfully, 0 failed: 100%|██████████| 1/1 [00:28<00:00, 28.18s/it]1 ran successfully, 0 failed: 100%|██████████| 1/1 [00:28<00:00, 28.18s/it]
-All instance images built successfully.
-{
-  "instance_id": "sympy__sympy-22840",
-  "image_tag": "sweb.eval.arm64.sympy__sympy-22840:latest",
-  "image_id": "sha256:221731ee087126a3e138cc911d8a406a95c87b45437d85b25ffc2755efbfe0df",
-  "architecture": "arm64",
-  "source_sha256": "7a21f37b8bc179c7db5beeb14e88ac538ba283455c776e6b2535bbfb6e3551b4",
-  "decoded_columns": [
-    "instance_id",
-    "repo",
-    "base_commit",
-    "version",
-    "environment_setup_commit"
-  ],
-  "harness_version": "3.0.17",
-  "audit_passed": false
-}

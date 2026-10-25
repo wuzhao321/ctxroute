@@ -1,9 +1,0 @@
-{
-  "instance_id": "sympy__sympy-22840",
-  "resolved": false,
-  "report_path": "/Users/wuzhaowei/Documents/ChatGPT/ctxroute/results/private/harness/2ddf897834db7a6a7e18/logs/run_evaluation/ctxroute-2ddf897834db7a6a7e18-A0-main-20261022/mini-swe-agent-A0/sympy__sympy-22840/report.json",
-  "report_sha256": "922ead983f204cab9c96f4f1c6f8eeedb19171561d523b8f95218ade5509d889",
-  "predictions_sha256": "f9cb83e5d461ad50fd7d8b5e606be067847a359ac60e9a6e119d958bf1603e06",
-  "harness_version": "3.0.17",
-  "provenance": "operator-supplied official harness report"
-}

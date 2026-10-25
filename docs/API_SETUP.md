@@ -1,32 +1,43 @@
-# 本机设置密钥与 API 冒烟
+# 模型 API 配置
 
-## 用户自行设置
+ctxroute 使用 DeepSeek 模型接口，支持直接 HTTP 和 PydanticAI 两种传输。模型层级、价格快照、输出限制及预算分别由 [`configs/`](../configs/) 管理。
 
-在自己的终端执行：
+## 设置密钥
+
+在项目根目录、已安装依赖的环境中运行：
 
 ```sh
-cd /Users/wuzhaowei/Documents/ChatGPT/ctxroute
 .venv/bin/python scripts/setup_key.py
+.venv/bin/ctxroute key-status
 ```
 
-随后粘贴 DeepSeek key 并回车。输入隐藏；若终端无法保证隐藏输入则直接退出。脚本只创建权限 600 的 .env，拒绝覆盖已有文件，不调用 API。不要把 key 发送到聊天或写进命令参数。
+设置脚本隐藏输入，创建权限为 `600` 的 `.env`，拒绝覆盖已有文件。`key-status` 只报告是否已配置。读取顺序为 `DEEPSEEK_API_KEY` 环境变量、项目 `.env`；文件值按字面量读取，不执行 shell 展开。
 
-设置后可运行 `.venv/bin/ctxroute key-status`，只显示是否配置，不显示值。读取优先级为 DEEPSEEK_API_KEY 环境变量、然后 .env；setup_key.py 生成的是未经 shell 展开的单行配置。如果已有同名环境变量，它优先于文件。
+密钥不应写入命令参数、版本控制或任务容器。设置密钥不会触发 API 请求。
 
-## 只看调用计划
+## 连通性探针
 
-`.venv/bin/ctxroute api-probe` 为离线 dry-run，不读密钥、不创建账本、不发送请求。
+```sh
+# 查看计划；不读取密钥或发送请求
+.venv/bin/ctxroute api-probe
 
-真实调用命令为 `.venv/bin/ctxroute api-probe --execute`，但在 configs/budget.json 的 paid_execution_enabled=false 时会拒绝。首个真实请求前由项目执行者检查、启用并提交配置；用户设置密钥本身不触发付费。
+# 显式发送固定短请求
+.venv/bin/ctxroute api-probe --execute
 
-## 调用与记录规则
+# 使用 PydanticAI 传输发送同一探针
+.venv/bin/ctxroute api-probe --transport pydantic_ai --execute
+```
 
-- 固定短提示 Reply exactly OK.，cheap 模型来自版本化价格配置；thinking disabled、temperature 0、max_tokens 32，非流式，只发一次，不自动重试。字段依据 [DeepSeek Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/) 和 [Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode/)。
-- 前置检查当天价格核验、密钥存在与本地 commit；打印预计预留/已核算/未结算预留/硬上限，事务预留 0.10 USD 后才派发。
-- 0.10 USD 是从总预算扣留的余量，不是实付估计。固定输入另设 4096 token 异常护栏，它是工程保护值，不是供应商承诺的 tokenizer 上界；超过护栏会保留费用证据并锁停。
-- 网络目标固定为 https://api.deepseek.com/chat/completions，不转发重定向，不使用环境代理，证书校验开启。不记录认证头、密钥、响应正文或异常原文。
-- results/runs/api-probe-*/ 内保存 manifest 与 traces.jsonl，记录原始数值 usage 字段、缓存命中、耗时、配置与价格哈希、commit。响应正文仅检查是否恰为 OK。
-- Ledger 在 results/budget/campaign.sqlite，跨运行共享；不能通过删除/换账本重置预算。未知 usage、连接超时仍保留 0.10 预留，不能假定没有发生计费。
-- 价格取自 [DeepSeek 官方价格页](https://api-docs.deepseek.com/quick_start/pricing/)。请求完整落在明确非高峰区间时按 usage 计算成本并结算；若涉及高峰/中国节假日歧义，报告上下界并保留预留等待对账。API usage 计算值与供应商账单验证分开标注。
+探针使用固定提示 `Reply exactly OK.`、`temperature=0`、关闭 thinking、非流式输出，最多生成 32 token；每次命令只发送一次请求，不自动重试。配置位于 [`configs/api_probe.json`](../configs/api_probe.json)。探针检查连接、响应与 usage 字段，不产生基准任务结果。
 
-通用 Agent 模型适配器与工具调用循环已实现。另可用 `.venv/bin/ctxroute api-probe --transport pydantic_ai --execute` 验证实际 SDK 传输；它与 HTTP 探针共享固定提示、32 token 上限和预算账本，每次命令最多一个请求。manifest 记录 transport。两种探针均不算 SWE-bench 实验结果。
+执行前需启用 `configs/budget.json` 的 `paid_execution_enabled`，并核验探针所引用价格快照的日期。请求前检查本地提交与预算，先预留配置额度，再派发请求。预留额度与最终 usage 成本分别记录。
+
+## 记录与计费
+
+- 请求目标固定为 `https://api.deepseek.com/chat/completions`，开启证书校验，禁用重定向和环境代理。
+- `results/runs/api-probe-*/` 保存 manifest 与 trace，包括 usage、缓存命中、耗时、配置和价格哈希；不记录认证头、密钥或响应正文。
+- 所有运行共享 `results/budget/campaign.sqlite`。超时或缺失 usage 的请求保留未结算预留，不能按零费用处理，也不能通过更换账本重置累计费用。
+- 输入护栏与最大输出限制用于请求前的保守费用预留；输入估算不是供应商 tokenizer 上界。
+- API usage 估算、价格上下界和供应商账单是不同依据。只有明确满足已配置费率区间时才按该区间结算，歧义保留待核对状态。
+
+通用模型执行还要求 runtime 为 `live`，并受冻结运行计划、任务限额和沙箱检查约束，详见 [REPRODUCE](REPRODUCE.md)。供应商接口参考：[Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/)、[Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode/)、[价格说明](https://api-docs.deepseek.com/quick_start/pricing/)。

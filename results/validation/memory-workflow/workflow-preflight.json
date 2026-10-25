@@ -1,9 +1,0 @@
-{
-  "kind": "offline_workflow_preflight_not_benchmark",
-  "prepare_idempotent": true,
-  "frozen_membership_loaded": true,
-  "unstarted_export_rejected": true,
-  "inference_executed": false,
-  "harness_executed": false,
-  "api_requests": 0
-}

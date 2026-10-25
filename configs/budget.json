@@ -10,5 +10,5 @@
     "network"
   ],
   "paid_execution_enabled": true,
-  "note": "API integration authorized on 2026-10-23. Fixed probe reserves at most $0.10 per request; benchmark runtime remains offline_only pending an isolated environment. Campaign hard limit $10; pause at $8."
+  "note": "Campaign-wide limits include API, compute, storage and network costs. Reserve the worst-case request cost before dispatch and retain reservations until usage is known."
 }

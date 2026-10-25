@@ -1,8 +1,0 @@
-{
-  "source_url": "https://cloud-images.ubuntu.com/releases/resolute/release-20260927/ubuntu-26.04-server-cloudimg-arm64.img",
-  "bytes": 945530880,
-  "sha256": "63a93bd5a8d76e33b15ceb5daa3657bd79be804748051ab178e643b0f5da22e7",
-  "publisher_checksum_matched": true,
-  "download_exit_code": 0,
-  "download_timeout_seconds": 180
-}

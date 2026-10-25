@@ -1,1 +1,0 @@
-bash: line 1: cd: /workspace/sympy: No such file or directory

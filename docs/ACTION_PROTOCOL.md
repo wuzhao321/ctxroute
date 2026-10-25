@@ -1,32 +1,41 @@
-# 动作协议 v2：代码阶段记录
+# 动作与输出协议
 
-日期：2026-10-25。范围：修复首轮 dev pilot 暴露的动作格式问题，完成必要离线验收。没有新增 API 请求、容器运行或 benchmark 结果。
+A1–A5 使用单个 JSON 对象表达动作。动作定义与严格解析位于 [`domain.py`](../src/ctxroute/domain.py)，执行与纠错位于 [`orchestrator/engine.py`](../src/ctxroute/orchestrator/engine.py)。A0 使用上游文本协议，见 [A0_ADAPTER](A0_ADAPTER.md)。
 
-## 原因与实现
+## 动作
 
-首轮 A1–A4 在连续两次无效动作后终止，原始响应包含 XML、解释文字或多余 JSON 结束括号。原请求仅靠提示要求 JSON，没有发送供应商的 JSON 输出参数。这是已确认的请求约束缺口；补上参数能否消除实际格式失败，仍需真实复测。
+```json
+{"tool":"bash","command":"cat pyproject.toml"}
+```
 
-- ModelRequest.response_format 明确区分 text 与 json_object。ctxroute Engine 的动作和压缩请求均选 JSON；A0 原生文本适配器保持默认文本请求。
-- DeepSeek 请求发送 response_format={"type":"json_object"}。PydanticAI 经 extra_body 透传，保留文本输出而不启用 SDK schema 校验或自动纠错，预算层先记录 usage，再由 Engine 校验动作。
-- 提示明确单对象、JSON 字符串转义和内部历史格式；格式反馈附具体校验原因与允许动作示例。trace 保存 validation_error，便于区别语法、动作字段与记忆证据问题。
-- 本地严格校验继续拒绝多余字段、不可用工具和不合规记忆引用；不自动剪裁 XML、Markdown 或多余括号。连续两次格式失败仍停止，纠错步骤计费规则不变。
-- 新计划的控制变量记录 json_action_v2 和输出模式，源代码与提示指纹随之变化。首轮计划和结果不可覆盖。
+```json
+{"tool":"recall","id":"ARTIFACT_ID","start":0,"end":100}
+```
 
-依据：[DeepSeek JSON Output 官方说明](https://api-docs.deepseek.com/guides/json_mode/)，2026-10-25 核验。JSON 模式约束语法，不保证动作 schema 正确；官方也提示可能返回空内容或受输出长度截断。不能把配置成功写成模型可靠性已验证。
+```json
+{"tool":"submit"}
+```
 
-## 验收与边界
+`bash` 要求非空字符串命令且不含空字符。`recall` 仅在配置启用摘要或截断时可用，使用字符偏移，要求 `0 <= start < end`。`submit` 结束动作循环，由编排器导出当前补丁，不表示补丁已经正确。
 
-执行 sh scripts/check.sh：ruff/format 通过，pyright 0 errors，65 tests passed。日志见 [checks.log](../results/validation/action-protocol-v2/checks.log)。本轮只新增两个针对性回归用例，并补充既有断言：
+每个动作可以附加 `remember` 数组，引用较早步骤的可见工具输出。引用格式与校验见 [STRUCTURED_MEMORY](STRUCTURED_MEMORY.md)。除此以外，缺失字段、额外字段、不可用工具及错误类型均拒绝接受，不做隐式类型转换。
 
-1. 实际已安装的 PydanticAI/OpenAI SDK 接收虚构密钥，通过 HTTP MockTransport 拦截请求，不访问网络。确认 JSON 参数出现在 HTTP 请求体，文本模式无该参数，每次调用只产生一次请求，原始无效文本不被修补，缓存 usage 正常回传并记录。固定 SDK 将输出上限映射为 max_completion_tokens。
-2. 合法 JSON 但非法动作字段不会触发沙箱命令；一次纠错后可提交。首轮出现的 XML/额外括号形式仍被拒绝，原有连续两次错误停止测试通过。
+## 模型输出模式
 
-这是本地协议与计费链路验证，不是供应商实测。SDK 用例在未安装可选依赖时会跳过；本机本次 65 项全部通过，无跳过。旧的压缩和路由离线用例仍通过，真实压缩/廉价路由效果仍未测。A0 的上下文上限问题本阶段未改动。
+`ModelRequest.response_format` 区分 `text` 与 `json_object`。ctxroute 的动作和压缩请求选择 JSON 模式，直接 HTTP 请求发送：
 
-本阶段新增实验费用为 0。最近已记录累计 usage 估算 0.073168868 USD，未知预留 0.10 USD，未核验账单；不重置预算或历史记录。
+```json
+{"response_format":{"type":"json_object"}}
+```
 
-## 下一阶段
+PydanticAI 通过 `extra_body` 传递同一参数，保留原始文本输出，由 ctxroute 执行 schema 校验。SDK 自动重试和自动格式纠错关闭，每次适配器调用只允许一个请求，所有额外请求由预算层显式管理。
 
-代码验收后按项目约定等待“继续”。真实复测前重新核验当天价格与执行时限、启动已有 ARM64 VM、固定新的源码版本和运行清单。使用同一首题、seed、A0→A4 顺序与每臂 0.20 USD / 50 步 / 600 秒限额，引用首轮计划 93d5e0763da19ee86a9c；这是开发修复后的复测，不与首轮合并成独立样本。
+JSON 模式约束输出语法，不保证动作 schema、引用或语义正确。宿主端仍拒绝 Markdown、XML 包装、解释文本和多余括号，不自动修补响应。相关供应商接口见 [DeepSeek JSON Output](https://api-docs.deepseek.com/guides/json_mode/)。
 
-新清单尚未生成、未启动。正式 test 继续暂缓。A0 上下文终止及压缩/路由是否实际触发，均需在后续阶段单独记录，不能因本次协议修复宣称已解决。
+## 纠错与记录
+
+预算层先记录 usage 与请求费用，再进行动作校验。无效动作不会调用沙箱；编排器把具体错误与合法示例加入下一步上下文，并在 trace 保存 `validation_error`。格式纠错消耗步骤、时间与模型费用。
+
+连续失败次数达到实验臂 `limits.format_attempts` 时，以 `format_failure` 结束；合法动作会清零连续格式失败计数。压缩摘要使用独立 schema，无效摘要以 `compression_format_failure` 结束，不自动追加压缩请求。
+
+输出模式、协议版本、提示与源码指纹进入运行记录。变更协议或停止规则后必须重新生成计划，避免将不同执行行为当作同一实验续跑。

@@ -1,6 +1,0 @@
-arm,run_id,termination,steps,model_requests,requests_with_usage,usage_cost_usd,peak_upper_usd,wall_seconds,empty_patches,resolved,test_completed,infrastructure_errors,compressions,accepted_compressions,format_errors,json_object_failures,validation_errors,tier_requests
-A0,2ddf897834db7a6a7e18-0000,context_limit,31,30,30,0.031960896,0.063921792,117.070149,0,0,1,0,0,0,2,,{},{'strong': 30}
-A1,2ddf897834db7a6a7e18-0001,step_limit,50,50,50,0.035975676,0.071951352,169.520172,1,0,0,0,0,0,0,0,{},{'strong': 50}
-A2,2ddf897834db7a6a7e18-0002,step_limit,50,52,52,0.063296366,0.126592732,194.845397,1,0,0,0,2,2,0,0,{},"{'strong': 50, 'cheap': 2}"
-A3,2ddf897834db7a6a7e18-0003,step_limit,50,50,50,0.039799848,0.079599696,196.632958,1,0,0,0,0,0,0,0,{},{'strong': 50}
-A4,2ddf897834db7a6a7e18-0004,step_limit,50,53,53,0.069672750,0.139345500,224.431619,1,0,0,0,3,3,2,0,{'Remember requires an exact quote from an earlier tool observation': 2},"{'strong': 50, 'cheap': 3}"

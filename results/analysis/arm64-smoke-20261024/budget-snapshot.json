@@ -1,9 +1,0 @@
-{
-  "usage_calculated_usd": "0.073168868",
-  "unknown_reservation_usd": "0.10",
-  "requests": 79,
-  "invoice_verified": false,
-  "hard_limit_usd": "10",
-  "pause_at_usd": "8",
-  "cloud_cost_usd": "0"
-}

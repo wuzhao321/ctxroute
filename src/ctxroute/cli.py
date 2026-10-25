@@ -72,7 +72,7 @@ def main() -> None:
                 "hard_limit_usd": str(Decimal(str(config["hard_limit"]))),
                 "pause_at_usd": str(Decimal(str(config["pause_at"]))),
                 "paid_execution_enabled": config["paid_execution_enabled"],
-                "status": "Local API integration enabled; benchmark execution paused",
+                "status": "configuration_loaded",
                 "note": "Configuration only; not a statement of account balance or billed cost",
             },
             ensure_ascii=False,

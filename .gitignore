@@ -18,7 +18,23 @@ data/cache/
 results/private/
 results/budget/*.sqlite*
 results/budget/*.lock
-# Preserve manifests, traces, predictions and evaluation evidence by default.
+# Experiment outputs and development context are local artifacts.
+results/
+.local/
+AGENTS.md
+.agents/
+docs/CLAIMS.md
+docs/CLOUD_PLAN.md
+docs/DECISIONS.md
+docs/ENV.lock.md
+docs/FULL_CHAIN_CHECK.md
+docs/IMPLEMENTATION_STATUS.md
+docs/LOCAL_ARM64.md
+docs/LOCAL_INTEGRATION.md
+docs/P0_API_STATUS.md
+docs/P0_STATUS.md
+docs/REPORT.md
+docs/RETEST_20261025.md
 
 artifacts/demos/
 

@@ -10,9 +10,7 @@ def build_server(service: SandboxService) -> Any:
     try:
         fast_mcp = import_module("mcp.server.fastmcp").FastMCP
     except ImportError:
-        raise RuntimeError(
-            "MCP SDK is not installed; environment setup is currently deferred"
-        ) from None
+        raise RuntimeError("MCP SDK is not installed; install the runtime dependencies") from None
     server = fast_mcp("ctxroute-sandbox-exec")
     server.tool()(service.create_sandbox)
     server.tool()(service.exec)
@@ -40,7 +38,7 @@ def main() -> None:
     args = parser.parse_args()
     runtime = json.loads((args.root / "configs/runtime.json").read_text())
     if runtime["execution_mode"] != "live":
-        raise RuntimeError("Sandbox execution is disabled during code-only development")
+        raise RuntimeError("Sandbox execution requires execution_mode=live")
     tasks = load_tasks(args.tasks)
     registry = json.loads(args.images.read_text())
     config = json.loads((args.root / "configs/sandbox.json").read_text())

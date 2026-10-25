@@ -106,6 +106,7 @@ RUN git reflog expire --expire=now --all && git gc --prune=now && \\
             "audit_passed": False,
         }
         path = root / "results/validation/live-preflight/harness-image.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(receipt, indent=2) + "\n")
         registry = root / "configs/private/images.json"
         registry.parent.mkdir(parents=True, exist_ok=True)

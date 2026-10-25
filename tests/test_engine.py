@@ -81,7 +81,7 @@ def test_format_failure_cleanup_and_corrective_feedback(tmp_path: Path) -> None:
 
 def test_invalid_action_never_executes_before_one_correction(tmp_path: Path) -> None:
     # Valid JSON can still violate the action schema; JSON mode is not schema mode.
-    # Extra braces/XML from the first pilot remain invalid, never silently repaired.
+    # Extra braces and XML remain invalid, never silently repaired.
     from ctxroute.domain import Action
 
     for raw in ('{"tool":"submit"}}', '<action>{"tool":"submit"}</action>'):

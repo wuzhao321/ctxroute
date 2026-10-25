@@ -153,7 +153,10 @@ def run_plan(
 ) -> list[dict[str, Any]]:
     runtime = json.loads((root / "configs/runtime.json").read_text())
     if not execute or runtime["execution_mode"] != "live" or not ledger.enabled:
-        raise RuntimeError("Campaign execution disabled; only code preparation is authorized")
+        raise RuntimeError(
+            "Campaign execution requires --execute, execution_mode=live "
+            "and paid_execution_enabled=true"
+        )
     plan = load_plan(root, plan_path)
     tasks = load_tasks(tasks_path)
     if any(job["instance_id"] not in tasks for job in plan["jobs"]):

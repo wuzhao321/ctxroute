@@ -1,4 +1,4 @@
-"""Run personally in a terminal; input is hidden and never sent to chat."""
+"""Save an API key from hidden terminal input without command-line arguments."""
 
 import getpass
 import sys
@@ -10,10 +10,10 @@ from ctxroute.secrets import save_new_key
 
 def main() -> None:
     if not sys.stdin.isatty():
-        raise SystemExit("请在自己的终端运行；不接受聊天、管道或命令行参数中的密钥。")
+        raise SystemExit("请在交互式终端运行；不接受管道或命令行参数中的密钥。")
     root = Path(__file__).resolve().parents[1]
     if (root / ".env").exists():
-        raise SystemExit(".env 已存在，未覆盖。需要更换密钥时请在本机编辑该文件。")
+        raise SystemExit(".env 已存在，未覆盖。需要更换密钥时请编辑该文件。")
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("error", getpass.GetPassWarning)

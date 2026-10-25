@@ -1,4 +1,0 @@
-{"run_id": "api-probe-20261023T003150-7ddee7ca", "event": "reserved", "reservation_usd": "0.10"}
-{"run_id": "api-probe-20261023T003150-7ddee7ca", "event": "response", "finished_at": "2026-10-23T00:31:52.089088+00:00", "latency_ms": 1929.451, "prompt_tokens": 8, "cached_tokens": 0, "completion_tokens": 1, "usage_fields": {"prompt_tokens": 8, "completion_tokens": 1, "prompt_cache_hit_tokens": 0, "prompt_cache_miss_tokens": 8, "total_tokens": 9}, "cost_lower_usd": "0.0000018", "cost_upper_usd": "0.0000036", "invoice_verified": false}
-{"run_id": "api-probe-20261023T003150-7ddee7ca", "event": "settled", "cost_usd": "0.0000018", "basis": "usage_off_peak"}
-{"run_id": "api-probe-20261023T003150-7ddee7ca", "event": "probe_passed", "response_matches_ok": true}

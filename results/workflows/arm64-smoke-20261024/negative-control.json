@@ -1,8 +1,0 @@
-{
-  "kind": "infrastructure_negative_control_not_model_or_pilot_result",
-  "grading_run_id": "ctxroute-infra-negative-93d5e0763da19ee86a9c",
-  "report_available": true,
-  "resolved": false,
-  "official_summary": "results/private/harness/infrastructure-negative-control-not-model.ctxroute-infra-negative-93d5e0763da19ee86a9c.json",
-  "official_summary_sha256": "8523f4ae76fd6843bfb9beb891a93a38db692b329afaaf893353356ebbb76bbf"
-}
