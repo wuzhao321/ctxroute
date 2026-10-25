@@ -1,0 +1,72 @@
+{
+  "kind": "offline_classifier_replay_not_benchmark",
+  "classifier_version": "literal_cd_single_command_v2",
+  "source_plan_id": "2ddf897834db7a6a7e18",
+  "new_api_calls": 0,
+  "rows": [
+    {
+      "run_id": "2ddf897834db7a6a7e18-0000",
+      "commands": 28,
+      "old_classes": {
+        "read": 5,
+        "edit_or_unknown": 22,
+        "test": 1
+      },
+      "new_classes": {
+        "read": 5,
+        "edit_or_unknown": 22,
+        "test": 1
+      },
+      "changed": 0
+    },
+    {
+      "run_id": "2ddf897834db7a6a7e18-0001",
+      "commands": 50,
+      "old_classes": {
+        "edit_or_unknown": 50
+      },
+      "new_classes": {
+        "edit_or_unknown": 47,
+        "read": 3
+      },
+      "changed": 3
+    },
+    {
+      "run_id": "2ddf897834db7a6a7e18-0002",
+      "commands": 50,
+      "old_classes": {
+        "edit_or_unknown": 50
+      },
+      "new_classes": {
+        "edit_or_unknown": 42,
+        "read": 8
+      },
+      "changed": 8
+    },
+    {
+      "run_id": "2ddf897834db7a6a7e18-0003",
+      "commands": 50,
+      "old_classes": {
+        "edit_or_unknown": 50
+      },
+      "new_classes": {
+        "edit_or_unknown": 45,
+        "read": 5
+      },
+      "changed": 5
+    },
+    {
+      "run_id": "2ddf897834db7a6a7e18-0004",
+      "commands": 48,
+      "old_classes": {
+        "edit_or_unknown": 48
+      },
+      "new_classes": {
+        "edit_or_unknown": 39,
+        "read": 9
+      },
+      "changed": 9
+    }
+  ],
+  "limitation": "Reclassifies saved commands only; does not predict new model decisions or costs."
+}

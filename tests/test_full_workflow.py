@@ -47,7 +47,7 @@ class ToySandbox:
 
     def execute(self, handle: str, command: str, timeout: float) -> Observation:
         assert self.active and handle == "toy-handle" and timeout > 0
-        if command == "cat toy.py":
+        if command in {"cat toy.py", "cd /testbed && cat toy.py"}:
             return Observation(self.file.read_text(), 0)
         if command == "fix-toy":
             assert self.file.read_text() == BEFORE
@@ -123,9 +123,9 @@ def test_offline_full_chain_and_evidence_guards(tmp_path: Path) -> None:
         sandbox = ToySandbox(tmp_path / run_id)
         model = ScriptedModel(
             [
-                '{"tool":"bash","command":"cat toy.py"}',
-                '{"tool":"bash","command":"cat toy.py"}',
-                '{"tool":"bash","command":"cat toy.py"}',
+                '{"tool":"bash","command":"cd /testbed && cat toy.py"}',
+                '{"tool":"bash","command":"cd /testbed && cat toy.py"}',
+                '{"tool":"bash","command":"cd /testbed && cat toy.py"}',
                 '{"tool":"bash","command":"fix-toy",'
                 '"remember":[{"step":1,"quote":"return a - b"}]}',
                 '{"tool":"bash","command":"check-toy"}',

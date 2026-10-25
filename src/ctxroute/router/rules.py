@@ -7,8 +7,28 @@ from dataclasses import dataclass
 from ctxroute.config import RouterConfig
 from ctxroute.domain import RunState, Tier
 
+CLASSIFIER_VERSION = "literal_cd_single_command_v2"
+
 
 def classify(command: str) -> str:
+    # Classify only: never rewrite the command sent to the sandbox. A single
+    # literal cd prefix is common even though each exec already starts in /testbed.
+    if "&&" in command:
+        prefix, rest = command.split("&&", 1)
+        try:
+            prefix_parts = shlex.split(prefix)
+        except ValueError:
+            return "edit_or_unknown"
+        if prefix_parts[:2] == ["cd", "--"]:
+            prefix_parts.pop(1)
+        if (
+            len(prefix_parts) != 2
+            or prefix_parts[0] != "cd"
+            or not re.fullmatch(r"(?:/|\.)[a-zA-Z0-9_./-]*", prefix_parts[1])
+            or any(c in prefix for c in ("$", "`", "\n", "\\", ";", "|", "<", ">", "&"))
+        ):
+            return "edit_or_unknown"
+        command = rest.strip()
     if any(symbol in command for symbol in (";", "|", ">", "<", "`", "$", "\n", "&")):
         return "edit_or_unknown"
     try:
@@ -30,7 +50,12 @@ def classify(command: str) -> str:
         p.startswith(("-exec", "-delete", "-ok", "-fprint", "-fls")) for p in parts
     ):
         return "read"
-    if len(parts) >= 3 and parts[:2] == ["sed", "-n"] and re.fullmatch(r"\d+(,\d+)?p", parts[2]):
+    if (
+        len(parts) >= 3
+        and parts[:2] == ["sed", "-n"]
+        and re.fullmatch(r"\d+(,\d+)?p", parts[2])
+        and all(not p.startswith("-") for p in parts[3:])
+    ):
         return "read"
     return "edit_or_unknown"
 
@@ -70,6 +95,7 @@ class RuleRouter:
                     or (category == "test" and previous.exit_code != 0)
                     or consecutive_errors
                     or (previous.tier == "cheap" and previous.error == "format_error")
+                    or previous.error == "repeated_action_blocked"
                 ):
                     self.remaining = cfg.strong_lock_steps
             if self.remaining:

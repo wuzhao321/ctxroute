@@ -77,17 +77,38 @@ class Limits:
 
 
 @dataclass(frozen=True)
+class ProgressConfig:
+    repeat_warn_after: int = 2
+    repeat_block_after: int = 3
+    max_blocked_repeats: int = 2
+    final_step_warning: int = 10
+
+    def __post_init__(self) -> None:
+        values = (
+            self.repeat_warn_after,
+            self.repeat_block_after,
+            self.max_blocked_repeats,
+            self.final_step_warning,
+        )
+        if any(type(value) is not int or value < 1 for value in values):
+            raise ValueError("Progress limits must be positive integers")
+        if self.repeat_warn_after >= self.repeat_block_after:
+            raise ValueError("Repeat warning must precede blocking")
+
+
+@dataclass(frozen=True)
 class ArmConfig:
     arm: str
     engine: str
     context: ContextConfig
     router: RouterConfig
     limits: Limits
+    progress: ProgressConfig = ProgressConfig()
 
     @classmethod
     def load(cls, path: Path) -> "ArmConfig":
         raw: dict[str, Any] = json.loads(path.read_text())
-        if set(raw) != {"arm", "engine", "context", "router", "limits"}:
+        if set(raw) - {"progress"} != {"arm", "engine", "context", "router", "limits"}:
             raise ValueError("Unknown or missing arm configuration fields")
         if raw["arm"] not in {f"A{i}" for i in range(8)}:
             raise ValueError("Unknown arm")
@@ -97,4 +118,5 @@ class ArmConfig:
             ContextConfig(**raw["context"]),
             RouterConfig(**raw["router"]),
             Limits(**raw["limits"]),
+            ProgressConfig(**raw.get("progress", {})),
         )

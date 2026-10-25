@@ -1,5 +1,7 @@
 # Claims Ledger
 
+2026-10-25 后续代码阶段：重复动作限制、进展提示与只读前缀分类已实现，68 项离线检查通过；真实效果未测，不能把被拦截重复命令视为成功修复。实现、配置和限制见 [PROGRESS_CONTROL.md](PROGRESS_CONTROL.md)。
+
 2026-10-25 同题真实复测已完成：[复测结论](../results/analysis/arm64-json-v2-20261025/RETEST_REVIEW.md)。A1–A4 的 200 个动作响应均可解析为 JSON 对象，A4 有两次记忆引用校验错误；实际接受 5 次压缩，廉价动作请求为 0。A0 非空补丁经官方测试未解决，其余四臂为空补丁。只支持协议及压缩链路已运行的工程结论，仍不支持成功率、节费或非劣结论。之前“真实复测未运行”段落为代码验收时的历史状态。
 
 2026-10-25 动作协议 v2 已实现并通过离线 SDK 请求拦截及本地质量门（65 项）。真实复测未运行，不能据此宣称格式失败已经消除。实现与边界见 [ACTION_PROTOCOL.md](ACTION_PROTOCOL.md)，证据见 [checks.log](../results/validation/action-protocol-v2/checks.log)。下述首轮实测结论保持不变。

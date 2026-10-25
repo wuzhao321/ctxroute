@@ -53,6 +53,7 @@ class ContextManager:
         self._attempted: set[str] = set()
         self._summary_cache: dict[str, Memory] = {}
         self.confirmed: list[dict[str, str | int]] = []
+        self.progress: dict[str, str | int | float | bool] = {}
 
     def remember(self, notes: tuple[EvidenceNote, ...], history: list[Step]) -> None:
         """Promote exact previously visible observations, never inferred conclusions."""
@@ -96,7 +97,8 @@ class ContextManager:
 
     def _user_text(self, memory: Memory, recent: list[Step]) -> str:
         return (
-            f"P0 TASK\n{self.task}\nP1 FIXED MEMORY\n"
+            f"P0 TASK\n{self.task}\nP0 RUN STATUS (orchestrator observations)\n"
+            f"{json.dumps(self.progress, ensure_ascii=False, sort_keys=True)}\nP1 FIXED MEMORY\n"
             f"{json.dumps(self.fixed, ensure_ascii=False, sort_keys=True)}\n"
             f"P2 WORKING MEMORY\n{memory.text()}\nP3 RECENT STEPS\n"
             + "\n".join(step.text() for step in recent)

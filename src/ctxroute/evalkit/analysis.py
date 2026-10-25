@@ -75,14 +75,25 @@ def summarize_run(directory: Path) -> dict[str, Any]:
             "output": sum(item["completion_tokens"] for item in selected),
             "cache_hit_rate": cached / input_tokens if input_tokens else None,
         }
-    commands = [event["command"] for event in events if event.get("command")]
-    read_commands = [command for command in commands if classify(command) == "read"]
+    command_events = [
+        event for event in events if event.get("command") and event.get("executed", True)
+    ]
+    commands = [event["command"] for event in command_events]
+    read_commands = [
+        event["command"]
+        for event in command_events
+        if event.get("command_class", classify(event["command"])) == "read"
+    ]
     seen: set[str] = set()
     repeated_after, reads_after, compressed = 0, 0, False
     for event in events:
         compressed |= bool(event.get("compress_event", {}).get("accepted"))
         command = event.get("command")
-        if command and classify(command) == "read":
+        if (
+            command
+            and event.get("executed", True)
+            and event.get("command_class", classify(command)) == "read"
+        ):
             if compressed:
                 reads_after += 1
                 repeated_after += command in seen
@@ -129,6 +140,9 @@ def summarize_run(directory: Path) -> dict[str, Any]:
             if event.get("compress_event", {}).get("accepted")
         ),
         "format_errors": sum(event.get("error_type") == "format_error" for event in events),
+        "blocked_repeat_actions": sum(
+            event.get("error_type") == "repeated_action_blocked" for event in events
+        ),
         "tool_errors": sum(
             event.get("error_type") in {"tool_error", "command_timeout", "output_limit"}
             for event in events

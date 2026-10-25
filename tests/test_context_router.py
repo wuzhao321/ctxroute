@@ -153,6 +153,25 @@ def test_routing_never_mistakes_shell_side_effects_for_read(command: str) -> Non
     assert classify(command) == "edit_or_unknown"
 
 
+def test_literal_cd_wrapper_classification_and_adversarial_commands() -> None:
+    assert classify("cd /testbed && cat src.py") == "read"
+    assert classify("cd -- '/testbed' && sed -n '1,20p' src.py") == "read"
+    assert classify("cd /testbed && python -m pytest tests/test_x.py") == "test"
+    for command in (
+        "cd /testbed && cat x && touch changed",
+        "cd /testbed && cat x > y",
+        "cd /testbed && rg --pre sh foo",
+        "cd $(pwd) && cat x",
+        "cd /testbed; true && cat x",
+        "cd /testbed && python -c 'print(1)'",
+        "cd /testbed && sed -n '1,2p' -i x",
+        "cd /testbed\n&& cat x",
+        "cd /testbed && cat x\nrm x",
+        "cd /testbed || cat x",
+    ):
+        assert classify(command) == "edit_or_unknown", command
+
+
 @pytest.mark.parametrize(
     "text",
     [

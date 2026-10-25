@@ -1,0 +1,12 @@
+{
+  "date": "2026-10-25",
+  "kind": "offline_code_validation_not_benchmark",
+  "code_fingerprint": "20e0af72350afb25a4eddfd34a799c18b3bea67e3c53ff8a53be7fe2cd90c6e8",
+  "tests_passed": 68,
+  "new_regression_tests": 3,
+  "api_requests": 0,
+  "new_experiment_cost_usd": "0",
+  "checks": "checks.log",
+  "prior_pilot_preserved": "2ddf897834db7a6a7e18",
+  "live_validation": "not_run"
+}

@@ -28,5 +28,11 @@
     "artifact_bytes": 8388608,
     "recall_chars": 4000,
     "format_attempts": 2
+  },
+  "progress": {
+    "repeat_warn_after": 2,
+    "repeat_block_after": 3,
+    "max_blocked_repeats": 2,
+    "final_step_warning": 10
   }
 }

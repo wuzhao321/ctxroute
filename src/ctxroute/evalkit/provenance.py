@@ -8,6 +8,7 @@ from typing import Any
 
 from ctxroute.config import ArmConfig
 from ctxroute.orchestrator.engine import SUMMARY_PROMPT, action_prompt
+from ctxroute.router.rules import CLASSIFIER_VERSION
 
 
 def code_fingerprint(root: Path) -> str:
@@ -40,6 +41,8 @@ def controlled_variables(
         "context": asdict(cfg.context),
         "router": asdict(cfg.router),
         "limits": asdict(cfg.limits),
+        "progress": asdict(cfg.progress) if native_config is None else None,
+        "command_classifier_version": CLASSIFIER_VERSION if native_config is None else None,
         "temperature": 0,
         "thinking": runtime["thinking"],
         "model_transport": "http" if native_config is not None else runtime["model_transport"],

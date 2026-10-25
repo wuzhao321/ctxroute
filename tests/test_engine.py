@@ -52,8 +52,12 @@ def test_compression_calls_cheap_layer_with_same_task_budget(tmp_path: Path) -> 
         context=replace(cfg.context, budget_tokens=4000),
         limits=replace(cfg.limits, output_head_chars=1000, output_tail_chars=1000),
     )
-    model = ScriptedModel(['{"tool":"bash","command":"cat x"}'] * 15 + ['{"tool":"submit"}'])
-    sandbox = FakeSandbox({"cat x": Observation("x" * 1500, 0)})
+    # Distinct reads exercise compression without deliberately triggering the loop guard.
+    commands = [f"cat file{i}" for i in range(15)]
+    model = ScriptedModel(
+        [json.dumps({"tool": "bash", "command": c}) for c in commands] + ['{"tool":"submit"}']
+    )
+    sandbox = FakeSandbox({c: Observation("x" * 1500, 0) for c in commands})
     result = Engine(cfg, model, sandbox, writer(tmp_path)).run(TASK, 1)
     assert result.state.termination == "submitted"
     summaries = [r for r in model.requests if r.purpose == "compression"]
@@ -166,3 +170,53 @@ def test_recorded_over_budget_response_terminates(tmp_path: Path) -> None:
         ArmConfig.load(ROOT / "configs/arms/A1.yaml"), Expensive(), sandbox, writer(tmp_path)
     ).run(TASK, 1)
     assert result.state.termination == "budget_limit" and sandbox.destroyed
+
+
+def test_unchanged_loop_blocks_execution_but_accounts_for_model_calls(tmp_path: Path) -> None:
+    class CostedFixture(ScriptedModel):
+        def complete(self, request: ModelRequest) -> ModelResponse:
+            return replace(super().complete(request), cost_upper=D("0.001"))
+
+    model = CostedFixture(['{"tool":"bash","command":"python -c \'print(1)\'"}'] * 5)
+    sandbox = FakeSandbox()
+    output = writer(tmp_path)
+    result = Engine(ArmConfig.load(ROOT / "configs/arms/A1.yaml"), model, sandbox, output).run(
+        TASK, 1
+    )
+    assert result.state.termination == "stagnation" and sandbox.destroyed
+    assert len(sandbox.commands) == 3 and len(model.requests) == 5
+    assert result.state.accounted_cost == D("0.005")
+    assert "Repeating the last command" in model.requests[2].messages[1]["content"]
+    traces = [json.loads(s) for s in (output.path / "traces.jsonl").read_text().splitlines()]
+    assert [t["executed"] for t in traces] == [True, True, True, False, False]
+    assert traces[-1]["progress"]["actions_left_including_current"] == 46
+    assert traces[-1]["progress"]["patch_present"] is False
+    assert traces[-1]["error_type"] == "repeated_action_blocked"
+
+
+def test_loop_feedback_allows_recovery_and_changed_patch_resets_streak(tmp_path: Path) -> None:
+    class EditingFixture(FakeSandbox):
+        def execute(self, handle: str, command: str, timeout: float) -> Observation:
+            result = super().execute(handle, command, timeout)
+            if command == "edit-fixture":
+                self.patch_text += "+changed line\n"
+            return result
+
+    cfg = ArmConfig.load(ROOT / "configs/arms/A4.yaml")
+    # Exercise the final-action reminder without running 50 fixture requests.
+    cfg = replace(cfg, progress=replace(cfg.progress, final_step_warning=50))
+    actions = ["cat x"] * 4 + ["edit-fixture"] * 5
+    model = ScriptedModel(
+        [json.dumps({"tool": "bash", "command": c}) for c in actions] + ['{"tool":"submit"}']
+    )
+    sandbox = EditingFixture()
+    output = writer(tmp_path)
+    result = Engine(cfg, model, sandbox, output).run(TASK, 1)
+    assert result.state.termination == "submitted" and sandbox.destroyed
+    assert len(sandbox.commands) == 8 and result.patch.count("+changed line") == 5
+    assert "Command not executed" in model.requests[4].messages[1]["content"]
+    assert "Few actions remain" in model.requests[-1].messages[1]["content"]
+    traces = [json.loads(s) for s in (output.path / "traces.jsonl").read_text().splitlines()]
+    assert traces[-1]["progress"]["patch_present"] is True
+    assert traces[-1]["progress"]["patch_added_lines"] == 5
+    assert model.requests[3].tier == "cheap" and model.requests[4].tier == "strong"
