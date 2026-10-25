@@ -35,3 +35,7 @@ scripts/docker-local.sh --version
 本轮新增 API/云费用为 0。历史 usage 估算累计 0.0000036 USD，未知调用仍预留 0.10 USD，未核对供应商账单。首题五臂最多预留 1 USD，累计 8 USD 暂停、10 USD 硬上限不变。
 
 官方来源：[Lima 安装](https://lima-vm.io/docs/installation/)、[v2.2.1 发行页](https://github.com/lima-vm/lima/releases/tag/v2.2.1)、[Lima Docker 模板说明](https://lima-vm.io/docs/examples/containers/docker/)、[Docker ARM64 客户端下载目录](https://download.docker.com/mac/static/stable/aarch64/)。
+
+## 2026-10-25 复测收尾
+
+复用原镜像完成动作协议 v2 五臂推理及官方判分，任务与判分容器已清理。VM 于本地 09:45 停止，镜像缓存保留；详见 results/validation/retest-20261025/lima-stop.log。无云资源。

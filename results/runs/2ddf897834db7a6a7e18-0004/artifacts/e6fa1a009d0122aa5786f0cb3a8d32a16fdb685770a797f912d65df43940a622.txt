@@ -1,0 +1,8 @@
+e: a*b <class 'sympy.matrices.expressions.matmul.MatMul'>
+is MatrixExpr: True
+args: (a, b)
+cse: ([], [a*b])
+cse list=False: ([], a*b)
+cse order none: ([], [a*b])
+cse basic: ([], [a*b])
+cse basic order none: ([], [a*b])

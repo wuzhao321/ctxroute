@@ -1,0 +1,3 @@
+Repeated MatrixElement:
+[(x0, A[0, 0])]
+[x0**2 + x0*A[1, 1]]

@@ -1,0 +1,81 @@
+{
+  "instance_id": "sympy__sympy-22840",
+  "arm": "A4",
+  "seed": 20261022,
+  "variant": "main",
+  "config": "configs/arms/A4.yaml",
+  "task_usd": "0.20",
+  "plan_id": "2ddf897834db7a6a7e18",
+  "task_sha256": "85189e32fc53039d1d4c0576baeb24c1782af3fe7af444d677f9f6a651813b7a",
+  "split": "dev",
+  "image_digest": "sha256:d6847485fe40b46c8ff0f4dada222d6d032ee7cd3643e5596141b7ffa53dccee",
+  "tool_transport": "mcp",
+  "kind": "agent_run",
+  "commit": "59104f218b6e012fa3aa23ad692255f48c4dcabc",
+  "config_sha256": "d28a867f221fc1b5889855ef34e422453dd928d7ea5357ba9c492100dbab9a38",
+  "price_sha256": "1d3f30b1b983aa5f8120403e556c51a79729ca64396ea7418106cedec748f4ea",
+  "model_ids": {
+    "cheap": "deepseek-flash",
+    "strong": "deepseek-v4-pro"
+  },
+  "harness_version": "3.0.17",
+  "engine": "ctxroute",
+  "model_transport": "pydantic_ai",
+  "source_tree_sha256": "74abe8240188c8e67f6a64cbaf091800feb775cae7b7afb10b5ed9dec76803ac",
+  "controls": {
+    "action_protocol": "json_action_v2",
+    "response_format": "json_object",
+    "prompt_config_sha256": "39bda13c92d20d28dcef7a19d9dcbe0582d27bfbfd0a90dc95901d6c80b59285",
+    "context": {
+      "budget_tokens": 32000,
+      "recent_steps": 6,
+      "soft_ratio": 0.7,
+      "hard_ratio": 0.9,
+      "mode": "summary",
+      "fixed_max_facts": 16,
+      "fixed_quote_chars": 500
+    },
+    "router": {
+      "enabled": true,
+      "default_tier": "strong",
+      "clean_steps": 3,
+      "strong_lock_steps": 5,
+      "cheap_context_tokens": 16000
+    },
+    "limits": {
+      "max_steps": 50,
+      "wall_seconds": 600,
+      "command_seconds": 30,
+      "task_usd": "0.20",
+      "max_output_tokens": 4096,
+      "output_head_chars": 2000,
+      "output_tail_chars": 2000,
+      "artifact_bytes": 8388608,
+      "recall_chars": 4000,
+      "format_attempts": 2
+    },
+    "temperature": 0,
+    "thinking": "disabled",
+    "model_transport": "pydantic_ai",
+    "tool_transport": "mcp",
+    "sandbox": {
+      "docker_binary": "./scripts/docker-local.sh",
+      "cpus": 2,
+      "memory": "4g",
+      "pids_limit": 128,
+      "workdir": "/testbed",
+      "command_timeout_seconds": 30,
+      "control_timeout_seconds": 30,
+      "kill_grace_seconds": 5,
+      "output_bytes": 1048576
+    },
+    "format_difference_from_A1": false
+  },
+  "run_id": "2ddf897834db7a6a7e18-0004",
+  "started_at": "2026-10-25T01:40:16.680258+00:00",
+  "wall_ms": 224431.57620900456,
+  "steps": 50,
+  "accounted_cost_upper_usd": "0.139345500",
+  "termination": "step_limit",
+  "finished_at": "2026-10-25T01:44:01.111877+00:00"
+}

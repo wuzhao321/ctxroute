@@ -49,3 +49,13 @@
 导入前检查预测没有偏离交接哈希。已导入的相同报告可以复用，变化的报告不能覆盖原 grade；已有分析目录不能覆盖。映射可缺少未返回的判分，缺失项保留为未测。输出 runs.csv、analysis.json、REPORT.md、failure_review.csv 及 workflow-provenance.json。失败分类仍需人工填写；绘图继续使用可选 plot 命令，不自动安装绘图库。
 
 Makefile 对应入口：`make reproduce ARM=A4 STAGE=prepare`，默认只准备已有 PLAN；推理须显式使用 `STAGE=infer EXECUTE=--execute`。PLAN、WORKFLOW、TASKS、IMAGES、REPORTS、OUTPUT 均可覆盖。当前支持固定 dev pilot，未开放正式 test 或多 seed 调度。
+
+## 2026-10-25 同题复测记录
+
+新计划 results/plans/arm64-json-v2-20261025.json，workflow 同名目录。grade_local_pilot.py 现将私有报告写入 results/private/harness/{plan_id}/reports.json，避免覆盖前次映射。汇总脚本现要求显式路径：
+
+```sh
+.venv/bin/python scripts/summarize_local_pilot.py --workflow results/workflows/arm64-json-v2-20261025 --output results/analysis/new-summary-directory --prior-plan-id 93d5e0763da19ee86a9c
+```
+
+输出目录内已有 pilot-summary.json 或 PILOT_REPORT.md 时拒绝覆盖。真实结果和下一阶段重点见 results/analysis/arm64-json-v2-20261025/RETEST_REVIEW.md。

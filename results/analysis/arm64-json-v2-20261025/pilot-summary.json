@@ -1,0 +1,134 @@
+{
+  "kind": "dev_pilot_official_summary_reconciliation",
+  "plan_id": "2ddf897834db7a6a7e18",
+  "prior_plan_id": "93d5e0763da19ee86a9c",
+  "instance_id": "sympy__sympy-22840",
+  "arms": [
+    {
+      "arm": "A0",
+      "run_id": "2ddf897834db7a6a7e18-0000",
+      "termination": "context_limit",
+      "steps": 31,
+      "model_requests": 30,
+      "requests_with_usage": 30,
+      "usage_cost_usd": "0.031960896",
+      "peak_upper_usd": "0.063921792",
+      "wall_seconds": 117.070149,
+      "empty_patches": 0,
+      "resolved": 0,
+      "test_completed": 1,
+      "infrastructure_errors": 0,
+      "compressions": 0,
+      "accepted_compressions": 0,
+      "format_errors": 2,
+      "json_object_failures": null,
+      "validation_errors": {},
+      "tier_requests": {
+        "strong": 30
+      }
+    },
+    {
+      "arm": "A1",
+      "run_id": "2ddf897834db7a6a7e18-0001",
+      "termination": "step_limit",
+      "steps": 50,
+      "model_requests": 50,
+      "requests_with_usage": 50,
+      "usage_cost_usd": "0.035975676",
+      "peak_upper_usd": "0.071951352",
+      "wall_seconds": 169.520172,
+      "empty_patches": 1,
+      "resolved": 0,
+      "test_completed": 0,
+      "infrastructure_errors": 0,
+      "compressions": 0,
+      "accepted_compressions": 0,
+      "format_errors": 0,
+      "json_object_failures": 0,
+      "validation_errors": {},
+      "tier_requests": {
+        "strong": 50
+      }
+    },
+    {
+      "arm": "A2",
+      "run_id": "2ddf897834db7a6a7e18-0002",
+      "termination": "step_limit",
+      "steps": 50,
+      "model_requests": 52,
+      "requests_with_usage": 52,
+      "usage_cost_usd": "0.063296366",
+      "peak_upper_usd": "0.126592732",
+      "wall_seconds": 194.845397,
+      "empty_patches": 1,
+      "resolved": 0,
+      "test_completed": 0,
+      "infrastructure_errors": 0,
+      "compressions": 2,
+      "accepted_compressions": 2,
+      "format_errors": 0,
+      "json_object_failures": 0,
+      "validation_errors": {},
+      "tier_requests": {
+        "strong": 50,
+        "cheap": 2
+      }
+    },
+    {
+      "arm": "A3",
+      "run_id": "2ddf897834db7a6a7e18-0003",
+      "termination": "step_limit",
+      "steps": 50,
+      "model_requests": 50,
+      "requests_with_usage": 50,
+      "usage_cost_usd": "0.039799848",
+      "peak_upper_usd": "0.079599696",
+      "wall_seconds": 196.632958,
+      "empty_patches": 1,
+      "resolved": 0,
+      "test_completed": 0,
+      "infrastructure_errors": 0,
+      "compressions": 0,
+      "accepted_compressions": 0,
+      "format_errors": 0,
+      "json_object_failures": 0,
+      "validation_errors": {},
+      "tier_requests": {
+        "strong": 50
+      }
+    },
+    {
+      "arm": "A4",
+      "run_id": "2ddf897834db7a6a7e18-0004",
+      "termination": "step_limit",
+      "steps": 50,
+      "model_requests": 53,
+      "requests_with_usage": 53,
+      "usage_cost_usd": "0.069672750",
+      "peak_upper_usd": "0.139345500",
+      "wall_seconds": 224.431619,
+      "empty_patches": 1,
+      "resolved": 0,
+      "test_completed": 0,
+      "infrastructure_errors": 0,
+      "compressions": 3,
+      "accepted_compressions": 3,
+      "format_errors": 2,
+      "json_object_failures": 0,
+      "validation_errors": {
+        "Remember requires an exact quote from an earlier tool observation": 2
+      },
+      "tier_requests": {
+        "strong": 50,
+        "cheap": 3
+      }
+    }
+  ],
+  "new_usage_cost_usd": "0.240705536",
+  "invoice_verified": false,
+  "unknown_prior_reservation_usd": "0.10",
+  "new_cloud_cost_usd": "0",
+  "negative_control_excluded_from_model_results": true,
+  "negative_control_run_in_this_batch": false,
+  "note": "Empty patches have official aggregate classifications but no test reports. Generic REPORT.md labels those absent reports missing; they are not infrastructure errors."
+}

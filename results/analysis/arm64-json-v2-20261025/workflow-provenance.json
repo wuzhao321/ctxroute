@@ -1,0 +1,9 @@
+{
+  "workflow_id": "5abc61b3d509ae4f887a781373babb4c96f378023cf67cc8dbdce7d9b360c23f",
+  "handoff_sha256": "1b9350489cbbe8428c66420c8173f49de7cd60c54f2ebd82734a420882a914b2",
+  "report_mapping_sha256": "73c0f41c4b5b3a3fe8716bd714cec91a847b161748ce5009129e47a91dda20ea",
+  "reports": {
+    "2ddf897834db7a6a7e18-0000": "922ead983f204cab9c96f4f1c6f8eeedb19171561d523b8f95218ade5509d889"
+  },
+  "note": "Operator-supplied official reports; correspondence must be checked in grading logs."
+}

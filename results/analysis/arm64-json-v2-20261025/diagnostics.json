@@ -1,0 +1,142 @@
+[
+  {
+    "arm": "A0",
+    "trace": "results/runs/2ddf897834db7a6a7e18-0000/traces.jsonl",
+    "bash_commands": 28,
+    "distinct_commands": 27,
+    "repeated_commands": 1,
+    "longest_identical_command_streak": 1,
+    "classification_counts": {
+      "read": 5,
+      "edit_or_unknown": 22,
+      "test": 1
+    },
+    "leading_cd_commands": 0,
+    "router_reasons": {
+      "native_fixed_tier": 30
+    },
+    "compressions": [],
+    "validation_errors": []
+  },
+  {
+    "arm": "A1",
+    "trace": "results/runs/2ddf897834db7a6a7e18-0001/traces.jsonl",
+    "bash_commands": 50,
+    "distinct_commands": 10,
+    "repeated_commands": 40,
+    "longest_identical_command_streak": 28,
+    "classification_counts": {
+      "edit_or_unknown": 50
+    },
+    "leading_cd_commands": 48,
+    "router_reasons": {
+      "fixed_tier": 50
+    },
+    "compressions": [],
+    "validation_errors": []
+  },
+  {
+    "arm": "A2",
+    "trace": "results/runs/2ddf897834db7a6a7e18-0002/traces.jsonl",
+    "bash_commands": 50,
+    "distinct_commands": 16,
+    "repeated_commands": 34,
+    "longest_identical_command_streak": 15,
+    "classification_counts": {
+      "edit_or_unknown": 50
+    },
+    "leading_cd_commands": 48,
+    "router_reasons": {
+      "fixed_tier": 50
+    },
+    "compressions": [
+      {
+        "step": 27,
+        "triggered": true,
+        "accepted": true,
+        "before": 22580,
+        "after": 7856,
+        "removed_steps": 20
+      },
+      {
+        "step": 49,
+        "triggered": true,
+        "accepted": true,
+        "before": 22451,
+        "after": 8279,
+        "removed_steps": 22
+      }
+    ],
+    "validation_errors": []
+  },
+  {
+    "arm": "A3",
+    "trace": "results/runs/2ddf897834db7a6a7e18-0003/traces.jsonl",
+    "bash_commands": 50,
+    "distinct_commands": 12,
+    "repeated_commands": 38,
+    "longest_identical_command_streak": 37,
+    "classification_counts": {
+      "edit_or_unknown": 50
+    },
+    "leading_cd_commands": 48,
+    "router_reasons": {
+      "default_strong": 1,
+      "strong_lock": 49
+    },
+    "compressions": [],
+    "validation_errors": []
+  },
+  {
+    "arm": "A4",
+    "trace": "results/runs/2ddf897834db7a6a7e18-0004/traces.jsonl",
+    "bash_commands": 48,
+    "distinct_commands": 15,
+    "repeated_commands": 33,
+    "longest_identical_command_streak": 24,
+    "classification_counts": {
+      "edit_or_unknown": 48
+    },
+    "leading_cd_commands": 46,
+    "router_reasons": {
+      "default_strong": 1,
+      "strong_lock": 49
+    },
+    "compressions": [
+      {
+        "step": 22,
+        "triggered": true,
+        "accepted": true,
+        "before": 23844,
+        "after": 17343,
+        "removed_steps": 15
+      },
+      {
+        "step": 25,
+        "triggered": true,
+        "accepted": true,
+        "before": 23966,
+        "after": 17949,
+        "removed_steps": 3
+      },
+      {
+        "step": 31,
+        "triggered": true,
+        "accepted": true,
+        "before": 22886,
+        "after": 11393,
+        "removed_steps": 6
+      }
+    ],
+    "validation_errors": [
+      {
+        "step": 7,
+        "reason": "Remember requires an exact quote from an earlier tool observation"
+      },
+      {
+        "step": 47,
+        "reason": "Remember requires an exact quote from an earlier tool observation"
+      }
+    ]
+  }
+]

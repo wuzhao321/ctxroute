@@ -1,0 +1,114 @@
+{
+  "workflow_id": "5abc61b3d509ae4f887a781373babb4c96f378023cf67cc8dbdce7d9b360c23f",
+  "run_prediction_hashes": {
+    "2ddf897834db7a6a7e18-0000": "f9cb83e5d461ad50fd7d8b5e606be067847a359ac60e9a6e119d958bf1603e06",
+    "2ddf897834db7a6a7e18-0001": "f890164bcdf9751ad4c9eed2c04ca000b493d5f4e4a25aab8e9567ab6e1c90d2",
+    "2ddf897834db7a6a7e18-0002": "2f3c0056c7c5efac712f161b80583a331877d1f0a0cd710cd25adcec8c6cdab3",
+    "2ddf897834db7a6a7e18-0003": "c1ad6742af1b789ced8cb1f3ed90bac82a6080a1e8fe41b6c6adf7a909ffbd00",
+    "2ddf897834db7a6a7e18-0004": "4a87b3e863dc0c76df3ec43421d3e5caacf3ad38c7602088ea06e29d85477490"
+  },
+  "cohorts": {
+    "A0-main-20261022": {
+      "predictions": "results/workflows/arm64-json-v2-20261025/predictions/A0-main-20261022.jsonl",
+      "sha256": "f9cb83e5d461ad50fd7d8b5e606be067847a359ac60e9a6e119d958bf1603e06",
+      "grading_run_id": "ctxroute-2ddf897834db7a6a7e18-A0-main-20261022",
+      "argv": [
+        "python",
+        "-m",
+        "swebench.harness.run_evaluation",
+        "--dataset_name",
+        "princeton-nlp/SWE-bench_Lite",
+        "--predictions_path",
+        "results/workflows/arm64-json-v2-20261025/predictions/A0-main-20261022.jsonl",
+        "--instance_ids",
+        "sympy__sympy-22840",
+        "--run_id",
+        "ctxroute-2ddf897834db7a6a7e18-A0-main-20261022",
+        "--max_workers",
+        "1"
+      ]
+    },
+    "A1-main-20261022": {
+      "predictions": "results/workflows/arm64-json-v2-20261025/predictions/A1-main-20261022.jsonl",
+      "sha256": "f890164bcdf9751ad4c9eed2c04ca000b493d5f4e4a25aab8e9567ab6e1c90d2",
+      "grading_run_id": "ctxroute-2ddf897834db7a6a7e18-A1-main-20261022",
+      "argv": [
+        "python",
+        "-m",
+        "swebench.harness.run_evaluation",
+        "--dataset_name",
+        "princeton-nlp/SWE-bench_Lite",
+        "--predictions_path",
+        "results/workflows/arm64-json-v2-20261025/predictions/A1-main-20261022.jsonl",
+        "--instance_ids",
+        "sympy__sympy-22840",
+        "--run_id",
+        "ctxroute-2ddf897834db7a6a7e18-A1-main-20261022",
+        "--max_workers",
+        "1"
+      ]
+    },
+    "A2-main-20261022": {
+      "predictions": "results/workflows/arm64-json-v2-20261025/predictions/A2-main-20261022.jsonl",
+      "sha256": "2f3c0056c7c5efac712f161b80583a331877d1f0a0cd710cd25adcec8c6cdab3",
+      "grading_run_id": "ctxroute-2ddf897834db7a6a7e18-A2-main-20261022",
+      "argv": [
+        "python",
+        "-m",
+        "swebench.harness.run_evaluation",
+        "--dataset_name",
+        "princeton-nlp/SWE-bench_Lite",
+        "--predictions_path",
+        "results/workflows/arm64-json-v2-20261025/predictions/A2-main-20261022.jsonl",
+        "--instance_ids",
+        "sympy__sympy-22840",
+        "--run_id",
+        "ctxroute-2ddf897834db7a6a7e18-A2-main-20261022",
+        "--max_workers",
+        "1"
+      ]
+    },
+    "A3-main-20261022": {
+      "predictions": "results/workflows/arm64-json-v2-20261025/predictions/A3-main-20261022.jsonl",
+      "sha256": "c1ad6742af1b789ced8cb1f3ed90bac82a6080a1e8fe41b6c6adf7a909ffbd00",
+      "grading_run_id": "ctxroute-2ddf897834db7a6a7e18-A3-main-20261022",
+      "argv": [
+        "python",
+        "-m",
+        "swebench.harness.run_evaluation",
+        "--dataset_name",
+        "princeton-nlp/SWE-bench_Lite",
+        "--predictions_path",
+        "results/workflows/arm64-json-v2-20261025/predictions/A3-main-20261022.jsonl",
+        "--instance_ids",
+        "sympy__sympy-22840",
+        "--run_id",
+        "ctxroute-2ddf897834db7a6a7e18-A3-main-20261022",
+        "--max_workers",
+        "1"
+      ]
+    },
+    "A4-main-20261022": {
+      "predictions": "results/workflows/arm64-json-v2-20261025/predictions/A4-main-20261022.jsonl",
+      "sha256": "4a87b3e863dc0c76df3ec43421d3e5caacf3ad38c7602088ea06e29d85477490",
+      "grading_run_id": "ctxroute-2ddf897834db7a6a7e18-A4-main-20261022",
+      "argv": [
+        "python",
+        "-m",
+        "swebench.harness.run_evaluation",
+        "--dataset_name",
+        "princeton-nlp/SWE-bench_Lite",
+        "--predictions_path",
+        "results/workflows/arm64-json-v2-20261025/predictions/A4-main-20261022.jsonl",
+        "--instance_ids",
+        "sympy__sympy-22840",
+        "--run_id",
+        "ctxroute-2ddf897834db7a6a7e18-A4-main-20261022",
+        "--max_workers",
+        "1"
+      ]
+    }
+  },
+  "executed_harness": false,
+  "instructions": "Transfer frozen predictions to the independent grading environment; run each argv from the project root there. Return official per-instance reports using a JSON mapping of inference run_id to report path. Do not reuse grading IDs with changed patches. Empty patches and failed runs remain in each cohort."
+}

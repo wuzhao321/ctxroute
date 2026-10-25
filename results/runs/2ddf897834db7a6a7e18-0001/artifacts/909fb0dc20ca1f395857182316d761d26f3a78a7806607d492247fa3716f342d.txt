@@ -1,0 +1,5 @@
+64:def cse_separate(r, e):
+90:def cse_release_variables(r, e):
+695:def cse(exprs, symbols=None, optimizations=None, postprocess=None,
+569:    from sympy.matrices.expressions import MatrixExpr, MatrixSymbol, MatMul, MatAdd
+675:                sym = MatrixSymbol(sym.name, orig_expr.rows,

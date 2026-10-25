@@ -1,0 +1,15 @@
+Test 1 - MatrixSymbol appears once:
+[]
+[A*B]
+
+Test 2 - MatrixSymbol appears twice in addition:
+[]
+[2*(A)]
+
+Test 3 - MatrixSymbol indexed multiple times:
+[]
+[2*A[0, 0] + A[1, 1]]
+
+Test 4 - Mixed with scalar symbols:
+[]
+[x*A[0, 0] + x*A[1, 1]]
