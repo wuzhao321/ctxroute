@@ -9,6 +9,13 @@ def pydantic_transport(payload: dict[str, Any], key: str, timeout: int) -> dict[
     """SDK is loaded only on explicit use; no installation or inference at import time."""
 
     async def request() -> dict[str, Any]:
+        extra_body = {"thinking": payload["thinking"]}
+        if "response_format" in payload:
+            if payload["response_format"] != {"type": "json_object"}:
+                raise ValueError("Unsupported response format")
+            # Keep raw text for Engine validation and accounting. SDK structured-output
+            # validation must not consume a correction outside the budgeted loop.
+            extra_body["response_format"] = payload["response_format"]
         sdk = import_module("pydantic_ai")
         openai = import_module("openai")
         models = import_module("pydantic_ai.models.openai")
@@ -46,7 +53,7 @@ def pydantic_transport(payload: dict[str, Any], key: str, timeout: int) -> dict[
                     "temperature": payload["temperature"],
                     "timeout": timeout,
                     "max_retries": 0,
-                    "extra_body": {"thinking": payload["thinking"]},
+                    "extra_body": extra_body,
                 },
             )
             usage = result.usage

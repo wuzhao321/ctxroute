@@ -59,6 +59,7 @@ class DeepSeekModel:
                 "request_id": request_id,
                 "step": request.step,
                 "purpose": request.purpose,
+                "response_format": request.response_format,
                 "tier": request.tier,
                 "model_id": model["model_id"],
                 "event": "reserved",
@@ -77,6 +78,8 @@ class DeepSeekModel:
             "thinking": {"type": self.thinking},
             "stream": False,
         }
+        if request.response_format == "json_object":
+            payload["response_format"] = {"type": "json_object"}
         try:
             raw = self.transport(payload, self.key, max(1, int(request.timeout_seconds)))
             usage = normalize_usage(raw)

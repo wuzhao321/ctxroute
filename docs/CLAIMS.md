@@ -1,5 +1,7 @@
 # Claims Ledger
 
+2026-10-25 动作协议 v2 已实现并通过离线 SDK 请求拦截及本地质量门（65 项）。真实复测未运行，不能据此宣称格式失败已经消除。实现与边界见 [ACTION_PROTOCOL.md](ACTION_PROTOCOL.md)，证据见 [checks.log](../results/validation/action-protocol-v2/checks.log)。下述首轮实测结论保持不变。
+
 | 拟写结论 | 状态 | 缺少证据 |
 | --- | --- | --- |
 | 首个 dev 基线运行 | 已测但无修复：A0–A4 均空补丁；正式 test 未测 | 见下方实测证据，不支持总体成功率结论 |

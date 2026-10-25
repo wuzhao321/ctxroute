@@ -1,0 +1,15 @@
+{
+  "date": "2026-10-25",
+  "stage": "action_protocol_v2_offline",
+  "code_fingerprint": "74abe8240188c8e67f6a64cbaf091800feb775cae7b7afb10b5ed9dec76803ac",
+  "checks": "checks.log",
+  "tests_passed": 65,
+  "tests_skipped": 0,
+  "new_regression_tests": 2,
+  "api_requests": 0,
+  "new_experiment_cost_usd": "0",
+  "benchmark_run": false,
+  "prior_plan_preserved": "93d5e0763da19ee86a9c",
+  "live_retest": "not_run",
+  "a0_context_limit": "unchanged"
+}

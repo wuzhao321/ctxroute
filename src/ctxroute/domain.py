@@ -126,6 +126,11 @@ class ModelRequest:
     run_id: str
     step: int
     scope_limit: Decimal
+    response_format: Literal["text", "json_object"] = "text"
+
+    def __post_init__(self) -> None:
+        if self.response_format not in {"text", "json_object"}:
+            raise ValueError("Unsupported response format")
 
 
 @dataclass(frozen=True)

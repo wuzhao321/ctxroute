@@ -34,6 +34,7 @@ def test_end_to_end_fake_run_and_prediction(arm: str, tmp_path: Path) -> None:
         TASK, 1
     )
     assert result.state.termination == "submitted" and result.patch == "synthetic patch"
+    assert all(r.response_format == "json_object" for r in model.requests)
     assert sandbox.destroyed and not sandbox.active
     assert len((output.path / "traces.jsonl").read_text().splitlines()) == 2
     prediction = json.loads((output.path / "predictions.jsonl").read_text())
@@ -57,6 +58,7 @@ def test_compression_calls_cheap_layer_with_same_task_budget(tmp_path: Path) -> 
     assert result.state.termination == "submitted"
     summaries = [r for r in model.requests if r.purpose == "compression"]
     assert summaries and all(r.tier == "cheap" and r.scope_limit == D("0.20") for r in summaries)
+    assert all(r.response_format == "json_object" for r in summaries)
     assert any(r.tier == "cheap" for r in model.requests if r.purpose == "action")
 
 
@@ -68,6 +70,33 @@ def test_format_failure_cleanup_and_corrective_feedback(tmp_path: Path) -> None:
     ).run(TASK, 1)
     assert result.state.termination == "format_failure" and sandbox.destroyed
     assert "Invalid action" in model.requests[1].messages[1]["content"]
+    assert "Return exactly one JSON action object" in model.requests[1].messages[1]["content"]
+    recent = model.requests[1].messages[1]["content"].split("P3 RECENT STEPS\n", 1)[1]
+    assert '{"tool":"bash","command":"..."}' in json.loads(recent)["observation"]
+
+
+def test_invalid_action_never_executes_before_one_correction(tmp_path: Path) -> None:
+    # Valid JSON can still violate the action schema; JSON mode is not schema mode.
+    # Extra braces/XML from the first pilot remain invalid, never silently repaired.
+    from ctxroute.domain import Action
+
+    for raw in ('{"tool":"submit"}}', '<action>{"tool":"submit"}</action>'):
+        with pytest.raises(ValueError):
+            Action.parse(raw, recall_enabled=False)
+    model = ScriptedModel(
+        ['{"tool":"bash","command":"touch unexpected","extra":true}', '{"tool":"submit"}']
+    )
+    sandbox = FakeSandbox()
+    output = writer(tmp_path)
+    result = Engine(ArmConfig.load(ROOT / "configs/arms/A1.yaml"), model, sandbox, output).run(
+        TASK, 1
+    )
+    assert result.state.termination == "submitted" and len(model.requests) == 2
+    assert result.state.history[0].action is None
+    assert sandbox.commands == []
+    traces = [json.loads(line) for line in (output.path / "traces.jsonl").read_text().splitlines()]
+    assert [t["tool"] for t in traces] == [None, "submit"]
+    assert traces[0]["validation_error"] == "Invalid action schema or unavailable tool"
 
 
 def test_two_model_failures_stop_and_cleanup(tmp_path: Path) -> None:

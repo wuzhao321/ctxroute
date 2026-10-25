@@ -27,12 +27,13 @@ def controlled_variables(
 ) -> dict[str, Any]:
     if native_config is None:
         prompts = {"action": action_prompt(cfg), "compression": SUMMARY_PROMPT}
-        protocol = "json_action"
+        protocol = "json_action_v2"
     else:
         prompts = {"agent": native_config["agent"], "model": native_config["model"]}
         protocol = "native_text_action"
     return {
         "action_protocol": protocol,
+        "response_format": "json_object" if native_config is None else "text",
         "prompt_config_sha256": hashlib.sha256(
             json.dumps(prompts, sort_keys=True).encode()
         ).hexdigest(),
