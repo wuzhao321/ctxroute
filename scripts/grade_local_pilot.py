@@ -61,7 +61,8 @@ def main() -> None:
     if {json.loads((r / "manifest.json").read_text())["instance_id"] for r in runs} != {iid}:
         raise ValueError("This launcher only supports the frozen first dev instance")
     image = json.loads((root / "results/validation/live-preflight/harness-image.json").read_text())
-    private = root / "results/private/harness"
+    # Each workflow owns its mapping and logs; never replace a previous pilot's files.
+    private = root / "results/private/harness" / workflow["plan_id"]
     private.mkdir(parents=True, exist_ok=True)
     url = (
         f"https://huggingface.co/datasets/{split['dataset']}/resolve/"

@@ -1,0 +1,18 @@
+{
+  "vm_status": "Running",
+  "architecture": "aarch64",
+  "host_mounts": [],
+  "image_id": "sha256:d6847485fe40b46c8ff0f4dada222d6d032ee7cd3643e5596141b7ffa53dccee",
+  "official_image_id": "sha256:221731ee087126a3e138cc911d8a406a95c87b45437d85b25ffc2755efbfe0df",
+  "sandbox_checks": "passed",
+  "prior_plan_id": "93d5e0763da19ee86a9c",
+  "plan_id": "2ddf897834db7a6a7e18",
+  "new_task_block_upper_usd": "1.00",
+  "spent_usd": "0.073168868",
+  "unknown_reserved_usd": "0.10",
+  "hard_limit_usd": "10",
+  "pause_at_usd": "8",
+  "cloud_usd": "0",
+  "retest_protocol_sha256": "bb47928237c805275f551ec7cbdf2ee03d8fdc5f71ac43e9b8b3400e165175c1",
+  "task_input_sha256": "0f5479f1d4bbfff1b8698b03151b481ae837631cc1e883e0d1de1c2fb027d627"
+}

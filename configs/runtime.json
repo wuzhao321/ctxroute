@@ -1,6 +1,6 @@
 {
   "execution_mode": "live",
-  "price_file": "data/prices/2026-10-24.json",
+  "price_file": "data/prices/2026-10-25.json",
   "input_guard_tokens": 32000,
   "thinking": "disabled",
   "model_attempts": 2,

@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "kind": "staged_dev_reproduction",
+  "plan_path": "results/plans/arm64-json-v2-20261025.json",
+  "plan_sha256": "17e3be1541399fc35fa038195331e95785cc18f59e0e3819a2835dc4a7cd8a04",
+  "plan_id": "2ddf897834db7a6a7e18",
+  "cohorts": {
+    "A0-main-20261022": [
+      {
+        "instance_id": "sympy__sympy-22840",
+        "arm": "A0",
+        "seed": 20261022,
+        "variant": "main",
+        "config": "configs/arms/A0.yaml",
+        "task_usd": "0.20",
+        "run_id": "2ddf897834db7a6a7e18-0000"
+      }
+    ],
+    "A1-main-20261022": [
+      {
+        "instance_id": "sympy__sympy-22840",
+        "arm": "A1",
+        "seed": 20261022,
+        "variant": "main",
+        "config": "configs/arms/A1.yaml",
+        "task_usd": "0.20",
+        "run_id": "2ddf897834db7a6a7e18-0001"
+      }
+    ],
+    "A2-main-20261022": [
+      {
+        "instance_id": "sympy__sympy-22840",
+        "arm": "A2",
+        "seed": 20261022,
+        "variant": "main",
+        "config": "configs/arms/A2.yaml",
+        "task_usd": "0.20",
+        "run_id": "2ddf897834db7a6a7e18-0002"
+      }
+    ],
+    "A3-main-20261022": [
+      {
+        "instance_id": "sympy__sympy-22840",
+        "arm": "A3",
+        "seed": 20261022,
+        "variant": "main",
+        "config": "configs/arms/A3.yaml",
+        "task_usd": "0.20",
+        "run_id": "2ddf897834db7a6a7e18-0003"
+      }
+    ],
+    "A4-main-20261022": [
+      {
+        "instance_id": "sympy__sympy-22840",
+        "arm": "A4",
+        "seed": 20261022,
+        "variant": "main",
+        "config": "configs/arms/A4.yaml",
+        "task_usd": "0.20",
+        "run_id": "2ddf897834db7a6a7e18-0004"
+      }
+    ]
+  },
+  "grading": "external_official_harness_only",
+  "execution_authorized": false,
+  "workflow_id": "5abc61b3d509ae4f887a781373babb4c96f378023cf67cc8dbdce7d9b360c23f"
+}
