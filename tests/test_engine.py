@@ -49,7 +49,8 @@ def test_compression_calls_cheap_layer_with_same_task_budget(tmp_path: Path) -> 
     cfg = ArmConfig.load(ROOT / "configs/arms/A4.yaml")
     cfg = replace(
         cfg,
-        context=replace(cfg.context, budget_tokens=4000),
+        # Fit the protected prompt/status plus recent steps while still forcing compression.
+        context=replace(cfg.context, budget_tokens=5000),
         limits=replace(cfg.limits, output_head_chars=1000, output_tail_chars=1000),
     )
     # Distinct reads exercise compression without deliberately triggering the loop guard.
@@ -76,6 +77,7 @@ def test_format_failure_cleanup_and_corrective_feedback(tmp_path: Path) -> None:
     assert "Invalid action" in model.requests[1].messages[1]["content"]
     assert "Return exactly one JSON action object" in model.requests[1].messages[1]["content"]
     recent = model.requests[1].messages[1]["content"].split("P3 RECENT STEPS\n", 1)[1]
+    recent = recent.split("\nNEXT ACTION", 1)[0]
     assert '{"tool":"bash","command":"..."}' in json.loads(recent)["observation"]
 
 
@@ -220,3 +222,28 @@ def test_loop_feedback_allows_recovery_and_changed_patch_resets_streak(tmp_path:
     assert traces[-1]["progress"]["patch_present"] is True
     assert traces[-1]["progress"]["patch_added_lines"] == 5
     assert model.requests[3].tier == "cheap" and model.requests[4].tier == "strong"
+
+
+def test_local_verification_is_bound_to_current_patch() -> None:
+    from ctxroute.config import ProgressConfig
+    from ctxroute.orchestrator.progress import ProgressTracker
+
+    tracker = ProgressTracker(ProgressConfig())
+
+    def priority() -> str | int | float | bool:
+        return tracker.status(step=10, max_steps=50, seconds_left=30, cost_left=D("0.1"))[
+            "next_priority"
+        ]
+
+    tracker.observe("edit", Observation("ok", 0), "+fix\n")
+    assert priority() == "verify_patch"
+    tracker.observe("python -c 'print(1)'", Observation("1", 0), "+fix\n")
+    assert priority() == "verify_patch"  # A reproduction is not a recognized test.
+    tracker.observe("pytest test_x.py", Observation("failed", 1), "+fix\n")
+    assert priority() == "repair_patch"
+    tracker.observe("pytest test_x.py", Observation("passed", 0), "+fix\n")
+    assert priority() == "review_and_submit" and tracker.verified_patch
+    tracker.observe("edit", Observation("ok", 0), "+different\n")
+    assert priority() == "verify_patch" and not tracker.verified_patch
+    tracker.observe("pytest test_x.py", Observation("passed", 0), "+changed during test\n")
+    assert priority() == "verify_patch"

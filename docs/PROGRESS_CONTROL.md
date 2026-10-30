@@ -35,6 +35,16 @@ cd /testbed && cat src.py
 
 ## Trace 与分析
 
+### 下一动作指引
+
+`progress.edit_prompt_after` 控制无补丁时的编辑提醒，默认在执行 6 条命令后生效；重复结果达到警告阈值也会提前提醒。该阈值改变建议，不增加或放宽执行额度。
+
+进展状态提供 `next_priority` 和 `next_action`：初始为 `investigate`；无补丁且达到提醒条件时为 `edit_needed`；补丁出现或变化后为 `verify_patch`；可识别测试命令返回非零时为 `repair_patch`，返回零时为 `review_and_submit`。指引同时置于用户上下文末尾的 `NEXT ACTION` 段，提示生成新的动作，而非复制历史命令。该段与运行状态均计入上下文估算和限制。
+
+`local_test_status` 仅表示识别出的测试命令退出状态，不表示测试覆盖充分、修复正确或官方判分通过。它绑定到 `local_test_patch_sha256`；任何已观察到的 diff 变化都会清除旧验证状态，测试命令自身修改 diff 时也不会记为已验证。普通 Python 复现脚本不自动计为测试。状态无法反映 git diff 之外的环境、忽略文件或外部状态变化。
+
+建议不强制编辑或提交，模型仍可在证据不足时继续调查；重复动作拦截、费用与墙钟限制继续独立生效。A0 原生循环不使用这些指引。模型输入、配置和源代码变化需要新的实验计划。
+
 trace 保存 `command_class`、`command_classifier_version`、`progress` 和 `executed`。拦截记录为 `executed=false`、`repeated_action_blocked`，分析以 `blocked_repeat_actions` 与实际执行的重复命令区分。
 
 分析优先使用执行时记录的分类；缺少分类字段的旧轨迹采用分析版本的回退逻辑。复现历史分析应使用对应源码版本。改变提示、停止规则或分类器后应冻结新计划，以保留比较条件。

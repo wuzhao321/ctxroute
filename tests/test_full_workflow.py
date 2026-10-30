@@ -14,14 +14,14 @@ from typing import Any
 import pytest
 
 from ctxroute.config import ArmConfig
-from ctxroute.domain import Observation, Task
+from ctxroute.domain import ModelRequest, ModelResponse, Observation, Task
 from ctxroute.evalkit.analysis import summarize_run
 from ctxroute.evalkit.campaign import create_plan, run_plan
 from ctxroute.evalkit.workflow import export, finalize, prepare
 from ctxroute.models.scripted import ScriptedModel
 from ctxroute.orchestrator.engine import Engine
 from ctxroute.tracing.budget import Ledger
-from ctxroute.tracing.cost import money
+from ctxroute.tracing.cost import Usage, money
 from ctxroute.tracing.writer import RunWriter
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -53,7 +53,7 @@ class ToySandbox:
             assert self.file.read_text() == BEFORE
             self.file.write_text(AFTER)
             return Observation("applied the toy edit", 0)
-        if command == "check-toy":
+        if command in {"check-toy", "pytest toy.py"}:
             # Verify only known bytes; never eval arbitrary generated code.
             passed = self.file.read_text() == AFTER
             return Observation(
@@ -193,3 +193,44 @@ def test_offline_full_chain_and_evidence_guards(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="changed since grading handoff"):
         finalize(tmp_path, workflow, mapping, tmp_path / "tampered-analysis")
     assert plan["purpose"] == "pilot"
+
+
+def test_guidance_drives_fixture_from_reproduction_to_edit_verify_submit(tmp_path: Path) -> None:
+    class GuidedFixture:
+        priorities: list[str] = []
+
+        def complete(self, request: ModelRequest) -> ModelResponse:
+            # Deterministic fixture follows guidance, not a claim about a real model.
+            tail = request.messages[1]["content"].split(
+                "NEXT ACTION (orchestrator guidance, not tool output)\n"
+            )[-1]
+            priority = json.loads(tail)["priority"]
+            self.priorities.append(priority)
+            commands = {
+                "investigate": "cat toy.py",
+                "edit_needed": "fix-toy",
+                "verify_patch": "pytest toy.py",
+            }
+            action = (
+                {"tool": "submit"}
+                if priority == "review_and_submit"
+                else {"tool": "bash", "command": commands[priority]}
+            )
+            return ModelResponse(json.dumps(action), "fixture", Usage(0, 0, 0))
+
+    sandbox = ToySandbox(tmp_path / "toy")
+    model = GuidedFixture()
+    writer = RunWriter(tmp_path / "runs", "guidance-fixture", {"kind": "synthetic_test"})
+    task = Task("synthetic-chain-1", "fixture/toy", "fixture-base", "Fix toy add")
+    result = Engine(ArmConfig.load(ROOT / "configs/arms/A1.yaml"), model, sandbox, writer).run(
+        task, 1
+    )
+    assert result.state.termination == "submitted" and sandbox.cleaned
+    assert model.priorities == [
+        "investigate",
+        "investigate",
+        "edit_needed",
+        "verify_patch",
+        "review_and_submit",
+    ]
+    assert sandbox.file.read_text() == AFTER and "+    return a + b" in result.patch

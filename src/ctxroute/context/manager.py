@@ -102,6 +102,16 @@ class ContextManager:
             f"{json.dumps(self.fixed, ensure_ascii=False, sort_keys=True)}\n"
             f"P2 WORKING MEMORY\n{memory.text()}\nP3 RECENT STEPS\n"
             + "\n".join(step.text() for step in recent)
+            + "\nNEXT ACTION (orchestrator guidance, not tool output)\n"
+            + json.dumps(
+                {
+                    "priority": self.progress.get("next_priority", "investigate"),
+                    "guidance": self.progress.get("next_action", "Choose the next useful action."),
+                    "request": "Return exactly one new JSON action. Do not replay the last record.",
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            )
         )
 
     def messages(self) -> tuple[dict[str, str], ...]:

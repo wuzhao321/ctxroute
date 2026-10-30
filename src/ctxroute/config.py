@@ -78,6 +78,7 @@ class Limits:
 
 @dataclass(frozen=True)
 class ProgressConfig:
+    edit_prompt_after: int = 6
     repeat_warn_after: int = 2
     repeat_block_after: int = 3
     max_blocked_repeats: int = 2
@@ -85,6 +86,7 @@ class ProgressConfig:
 
     def __post_init__(self) -> None:
         values = (
+            self.edit_prompt_after,
             self.repeat_warn_after,
             self.repeat_block_after,
             self.max_blocked_repeats,
