@@ -10,6 +10,7 @@
 | `repeat_block_after` | 3 | 达到阈值后拦截再次执行同一命令 |
 | `max_blocked_repeats` | 2 | 连续拦截达到阈值时以 `stagnation` 结束 |
 | `final_step_warning` | 10 | 剩余动作达到阈值时提示优先编辑、验证和提交 |
+| `edit_prompt_after` | 6 | 执行达到指定命令数仍无补丁时，提示形成最小实现修改 |
 
 默认设置允许最多三次相同命令与结果组合。随后相同命令不再执行，模型收到纠错反馈；连续两次仍请求该命令则停止。模型请求已经发生，因此被拦截动作仍计入费用和步数。更换动作可以继续，新的输出或补丁会重置观察连续计数。
 
@@ -33,9 +34,7 @@ cd /testbed && cat src.py
 
 路由还要求满足无错误历史、上下文阈值和强模型锁条件，识别为只读并不保证下一步切换到廉价模型。重复动作被拦截时触发强模型锁。
 
-## Trace 与分析
-
-### 下一动作指引
+## 下一动作指引
 
 `progress.edit_prompt_after` 控制无补丁时的编辑提醒，默认在执行 6 条命令后生效；重复结果达到警告阈值也会提前提醒。该阈值改变建议，不增加或放宽执行额度。
 
@@ -44,6 +43,8 @@ cd /testbed && cat src.py
 `local_test_status` 仅表示识别出的测试命令退出状态，不表示测试覆盖充分、修复正确或官方判分通过。它绑定到 `local_test_patch_sha256`；任何已观察到的 diff 变化都会清除旧验证状态，测试命令自身修改 diff 时也不会记为已验证。普通 Python 复现脚本不自动计为测试。状态无法反映 git diff 之外的环境、忽略文件或外部状态变化。
 
 建议不强制编辑或提交，模型仍可在证据不足时继续调查；重复动作拦截、费用与墙钟限制继续独立生效。A0 原生循环不使用这些指引。模型输入、配置和源代码变化需要新的实验计划。
+
+## Trace 与分析
 
 trace 保存 `command_class`、`command_classifier_version`、`progress` 和 `executed`。拦截记录为 `executed=false`、`repeated_action_blocked`，分析以 `blocked_repeat_actions` 与实际执行的重复命令区分。
 
