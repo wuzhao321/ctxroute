@@ -14,8 +14,9 @@ from ctxroute.tracing.budget import Ledger
 from ctxroute.tracing.writer import RunWriter
 
 
+@pytest.mark.parametrize("thinking", ["disabled", "enabled"])
 def test_sdk_preserves_output_mode_raw_text_usage_and_single_request(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, thinking: str
 ) -> None:
     httpx = pytest.importorskip("httpx")
     pytest.importorskip("pydantic_ai")
@@ -44,6 +45,7 @@ def test_sdk_preserves_output_mode_raw_text_usage_and_single_request(
                 "usage": {
                     "prompt_tokens": 20,
                     "completion_tokens": 8,
+                    "completion_tokens_details": {"reasoning_tokens": 5},
                     "total_tokens": 28,
                     "prompt_cache_hit_tokens": 5,
                     "prompt_cache_miss_tokens": 15,
@@ -69,7 +71,7 @@ def test_sdk_preserves_output_mode_raw_text_usage_and_single_request(
         ledger=ledger,
         writer=writer,
         input_guard_tokens=100,
-        thinking="disabled",
+        thinking=thinking,
         transport=pydantic_transport,
     )
     modes: tuple[Literal["json_object", "text"], ...] = ("json_object", "text")
@@ -94,8 +96,9 @@ def test_sdk_preserves_output_mode_raw_text_usage_and_single_request(
         assert result.text == outputs[i]
         assert result.usage.input_tokens == 20 and result.usage.cached_tokens == 5
         assert result.usage.output_tokens == 8
-        assert captured[i]["thinking"] == {"type": "disabled"}
-        assert captured[i]["max_completion_tokens"] == 32
+        assert captured[i]["thinking"] == {"type": thinking}
+        assert captured[i]["max_tokens"] == 32
+        assert "max_completion_tokens" not in captured[i]
     assert captured[0]["response_format"] == {"type": "json_object"}
     assert "response_format" not in captured[1]
     records = [

@@ -38,6 +38,6 @@ ctxroute 使用 DeepSeek 模型接口，支持直接 HTTP 和 PydanticAI 两种�
 - `results/runs/api-probe-*/` 保存 manifest 与 trace，包括 usage、缓存命中、耗时、配置和价格哈希；不记录认证头、密钥或响应正文。
 - 所有运行共享 `results/budget/campaign.sqlite`。超时或缺失 usage 的请求保留未结算预留，不能按零费用处理，也不能通过更换账本重置累计费用。
 - 输入护栏与最大输出限制用于请求前的保守费用预留；输入估算不是供应商 tokenizer 上界。
-- API usage 估算、价格上下界和供应商账单是不同依据。只有明确满足已配置费率区间时才按该区间结算，歧义保留待核对状态。
+- 连通探针与任务模型网关具有不同的结算路径。任务网关在有效 usage 返回后，确定非高峰时按非高峰价结算，其余时段按高峰价保守结算。缺少 usage 的请求保留预留。API usage 估算仍需与供应商账单核对，详见 [MODEL_GATEWAY](MODEL_GATEWAY.md)。
 
 通用模型执行还要求 runtime 为 `live`，并受冻结运行计划、任务限额和沙箱检查约束，详见 [REPRODUCE](REPRODUCE.md)。供应商接口参考：[Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/)、[Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode/)、[价格说明](https://api-docs.deepseek.com/quick_start/pricing/)。

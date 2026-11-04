@@ -41,3 +41,8 @@ artifacts/demos/
 # Sanitized runtime inputs and environment-specific registries stay local.
 data/private/
 configs/private/
+
+# Personal project planning and presentation drafts.
+/ctxroute · AI Agent 执行 Prompt.md
+/ctxroute 面试问答手册.docx
+/ctxroute 项目计划书.md

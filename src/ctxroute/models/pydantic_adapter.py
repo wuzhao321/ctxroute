@@ -42,7 +42,10 @@ def pydantic_transport(payload: dict[str, Any], key: str, timeout: int) -> dict[
             else:
                 raise ValueError("Expected fixed probe or two-message context envelope")
             model = models.OpenAIChatModel(
-                payload["model"], provider=providers.DeepSeekProvider(openai_client=client)
+                payload["model"],
+                provider=providers.DeepSeekProvider(openai_client=client),
+                # DeepSeek documents max_tokens for Chat Completions.
+                profile={"openai_chat_supports_max_completion_tokens": False},
             )
             agent = sdk.Agent(model, system_prompt=system_prompt, output_type=str, retries=0)
             result = await agent.run(

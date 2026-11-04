@@ -12,7 +12,7 @@ ctxroute 是面向软件工程 Agent 的实验框架，用于研究结构化上�
 - **工具与隔离执行**：提供 Docker 沙箱与 MCP 工具接口，管理命令执行、资源限制、补丁提取和容器生命周期；动作协议与进展控制负责校验输出和处理重复动作。
 - **实验编排与分析**：提供实验清单冻结、任务级续跑、费用预留与结算、请求和步骤轨迹、预测导出、SWE-bench 官方判分对接、消融配置和配对统计分析。
 
-## 结构与导航
+## 项目结构
 
 | 路径 | 内容 |
 |---|---|
@@ -31,9 +31,13 @@ ctxroute 是面向软件工程 Agent 的实验框架，用于研究结构化上�
 | [tests/](tests/) | 核心模块和工作流测试 |
 | [pyproject.toml](pyproject.toml) / [uv.lock](uv.lock) | 项目依赖、工具配置与依赖锁定 |
 
+## 文档导航
+
 | 文档 | 查看内容 |
 |---|---|
 | [ARCHITECTURE](docs/ARCHITECTURE.md) | 整体架构、模块职责与数据流 |
+| [MODEL_GATEWAY](docs/MODEL_GATEWAY.md) | 请求传输、输出限制、结算与错误记录边界 |
+| [DEVELOPMENT](docs/DEVELOPMENT.md) | 依赖安装、离线测试和静态检查 |
 | [API_SETUP](docs/API_SETUP.md) | 模型服务配置与密钥设置 |
 | [REPRODUCE](docs/REPRODUCE.md) | 准备、推理、导出和分析流程 |
 | [PREREG](docs/PREREG.md) | 实验设计与清单冻结规则 |

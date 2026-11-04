@@ -118,7 +118,9 @@ class DeepSeekModel:
                 raise ModelFailure("Provider price exceeded reservation")
             if definitely_off_peak(started, ended, self.prices["peak_hours_utc"]):
                 self.ledger.settle(request_id, price_from(model["off_peak"]).cost(usage))
-            # Peak/holiday ambiguity deliberately remains reserved, including in task scope.
+            else:
+                # Verified usage has a finite peak-price cost even when the period is unknown.
+                self.ledger.settle(request_id, upper)
             text = raw["choices"][0]["message"]["content"]
             if not isinstance(text, str) or raw["choices"][0]["finish_reason"] != "stop":
                 raise ModelFailure("Incomplete model response")
