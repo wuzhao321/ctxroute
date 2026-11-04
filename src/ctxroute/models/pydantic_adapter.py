@@ -4,6 +4,8 @@ import asyncio
 from importlib import import_module
 from typing import Any
 
+from ctxroute.models.diagnostics import active_wire
+
 
 def pydantic_transport(payload: dict[str, Any], key: str, timeout: int) -> dict[str, Any]:
     """SDK is loaded only on explicit use; no installation or inference at import time."""
@@ -22,12 +24,30 @@ def pydantic_transport(payload: dict[str, Any], key: str, timeout: int) -> dict[
         providers = import_module("pydantic_ai.providers.deepseek")
         httpx = import_module("httpx")
         usage_types = import_module("pydantic_ai.usage")
+        wire = active_wire.get()
+
+        async def observe_request(request: Any) -> None:
+            if wire is not None:
+                # The SDK sends a buffered JSON body. Never materialize a stream for logging.
+                try:
+                    wire.request_body_bytes = len(request.content)
+                except httpx.RequestNotRead:
+                    pass
+
+        async def observe_response(response: Any) -> None:
+            if wire is not None:
+                wire.observe_response(response.status_code, response.headers)
+
         client = openai.AsyncOpenAI(
             api_key=key,
             base_url="https://api.deepseek.com",
             max_retries=0,
             timeout=timeout,
-            http_client=httpx.AsyncClient(trust_env=False, follow_redirects=False),
+            http_client=httpx.AsyncClient(
+                trust_env=False,
+                follow_redirects=False,
+                event_hooks={"request": [observe_request], "response": [observe_response]},
+            ),
         )
         try:
             messages = payload["messages"]

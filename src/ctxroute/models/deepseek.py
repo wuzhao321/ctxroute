@@ -14,6 +14,7 @@ from ctxroute.api_probe import (
 )
 from ctxroute.domain import ModelRequest, ModelResponse
 from ctxroute.models.base import ModelFailure
+from ctxroute.models.diagnostics import WireMetadata, active_wire
 from ctxroute.tracing.budget import Ledger
 from ctxroute.tracing.cost import Usage
 from ctxroute.tracing.writer import RunWriter
@@ -80,6 +81,8 @@ class DeepSeekModel:
         }
         if request.response_format == "json_object":
             payload["response_format"] = {"type": "json_object"}
+        wire = WireMetadata()
+        token = active_wire.set(wire)
         try:
             raw = self.transport(payload, self.key, max(1, int(request.timeout_seconds)))
             usage = normalize_usage(raw)
@@ -127,7 +130,7 @@ class DeepSeekModel:
             return ModelResponse(
                 text.replace(self.key, "[REDACTED]"), model["model_id"], usage, elapsed, upper
             )
-        except Exception:
+        except Exception as exc:
             self.writer.append(
                 "requests",
                 {
@@ -136,6 +139,7 @@ class DeepSeekModel:
                     "purpose": request.purpose,
                     "event": "failed",
                     "error_type": "model_request_failed",
+                    **wire.failure_fields(exc, self.key, list(request.messages)),
                     "latency_ms": (time.monotonic() - timer) * 1000,
                     "ended_at": datetime.now(UTC).isoformat(),
                 },
@@ -143,3 +147,5 @@ class DeepSeekModel:
             raise ModelFailure(
                 "Model request failed; inspect numeric usage and reservations"
             ) from None
+        finally:
+            active_wire.reset(token)

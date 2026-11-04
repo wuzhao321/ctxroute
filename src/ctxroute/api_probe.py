@@ -16,6 +16,7 @@ from typing import Any, cast
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+from ctxroute.models.diagnostics import active_wire
 from ctxroute.secrets import load_key
 from ctxroute.tracing.budget import Ledger
 from ctxroute.tracing.cost import Price, Usage, money
@@ -36,15 +37,21 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def http_transport(payload: Json, key: str, timeout: int) -> Json:
+    body = json.dumps(payload).encode()
     request = urllib.request.Request(
         "https://api.deepseek.com/chat/completions",
-        data=json.dumps(payload).encode(),
+        data=body,
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
         method="POST",
     )
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+    wire = active_wire.get()
+    if wire is not None:
+        wire.request_body_bytes = len(body)
     # Neither redirects nor environment proxy settings may forward the credential.
     with opener.open(request, timeout=timeout) as response:
+        if wire is not None:
+            wire.observe_response(response.status, response.headers)
         raw = response.read(1_048_577)
     if len(raw) > 1_048_576:
         raise ProbeError("response_too_large")
