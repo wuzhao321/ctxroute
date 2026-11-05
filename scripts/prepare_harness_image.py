@@ -14,6 +14,8 @@ import pyarrow.parquet as pq
 from swebench.harness.docker_build import build_instance_images
 from swebench.harness.test_spec.test_spec import make_test_spec
 
+from ctxroute.evalkit.harness_source import sanitization_commands, validated_base
+
 
 def main() -> None:
     root = Path(__file__).resolve().parents[1]
@@ -64,6 +66,7 @@ def main() -> None:
     # No gold patch, hidden tests, test names, hints or evaluation scripts are decoded.
     row = {**rows[0], "test_patch": "", "FAIL_TO_PASS": [], "PASS_TO_PASS": []}
     spec = make_test_spec(row)
+    base = validated_base(spec, row, row, arch="arm64")
     if spec.arch != "arm64":
         raise ValueError("Official harness requires a different architecture for this task")
     client = docker.DockerClient(
@@ -78,14 +81,11 @@ def main() -> None:
             raise ValueError("Built image is not ARM64")
         # Official setup removes the remote, but tags and reflogs can still retain
         # future commits. Remove these from the inference image before the agent runs.
-        dockerfile = f"""FROM {image.id}
-WORKDIR /testbed
-RUN current=$(git symbolic-ref HEAD) && \\
-    git for-each-ref --format='%(refname)' | while IFS= read -r ref; do \\
-      if [ "$ref" != "$current" ]; then git update-ref -d "$ref"; fi; done
-RUN git reflog expire --expire=now --all && git gc --prune=now && \\
-    test "$(git rev-list --all --not HEAD | wc -l)" -eq 0
-"""
+        dockerfile = (
+            f"FROM {image.id}\nWORKDIR /testbed\n"
+            + "\n".join("RUN " + command for command in sanitization_commands(base))
+            + "\n"
+        )
         task_image, _ = client.images.build(
             fileobj=io.BytesIO(dockerfile.encode()),
             tag=f"ctxroute.task.arm64.{iid}:audited-history",
