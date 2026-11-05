@@ -32,6 +32,8 @@ def pydantic_transport(payload: dict[str, Any], key: str, timeout: int) -> dict[
             raise ValueError("Invalid stream option")
         wire.streaming = streaming
         tracker = StreamTracker()
+        if streaming:
+            wire.stream_terminal = tracker.terminal_fields()
 
         async def observe_request(request: Any) -> None:
             # The SDK sends a buffered JSON body. Never materialize a stream for logging.
@@ -53,6 +55,7 @@ def pydantic_transport(payload: dict[str, Any], key: str, timeout: int) -> dict[
                     wire.sse_events = tracker.events
                     wire.sse_keepalives = tracker.keepalives
                     wire.sse_done = tracker.done
+                    wire.stream_terminal = tracker.terminal_fields()
 
             if response.is_stream_consumed:
                 # Mock/cached responses have already been decoded by HTTPX.

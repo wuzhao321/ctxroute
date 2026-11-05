@@ -21,6 +21,20 @@ first byte and last byte. Streaming records also contain event and keep-alive
 counts and whether the completion marker arrived. These observations locate
 the stage of an interruption, but do not identify which network node caused it.
 
+The stream observer also retains a small `stream_terminal` receipt: an allowed
+finish-reason value, validated numeric usage, and booleans indicating whether
+answer text or reasoning was present. It does not retain either text. Missing,
+invalid and conflicting usage remain distinct. The receipt survives SDK output
+validation failures, including a response containing only reasoning. This lets
+diagnostics distinguish output exhaustion (`length`) from an empty answer with
+`stop`, which can otherwise produce the same SDK exception type. Unknown finish
+reasons are reduced to an enum rather than copied into logs.
+
+The receipt is diagnostic evidence only. It neither bypasses output validation
+nor changes retry policy or settles a reservation after SDK failure. `[DONE]`
+does not imply that the SDK accepted an answer; `response_completed` describes
+HTTP iterator exhaustion, which an SDK may skip after receiving `[DONE]`.
+
 ## Bounded retry
 
 `Engine(..., model_attempts=2, retry_transient_only=True)` allows one further
@@ -61,7 +75,9 @@ through the installed SDKs. They cover split UTF-8, gzip, keep-alives,
 disconnection, absent completion markers, missing usage, total deadlines,
 retained reservations, and budget rejection before a retry. Engine fixtures
 check that partial/extra actions never execute and rejected memory is not
-promoted. Official benchmark grading remains an independent process.
+promoted. Thinking-only streams also verify that their terminal receipt survives
+SDK rejection, their reservations remain held, and no command or retry runs.
+Official benchmark grading remains an independent process.
 
 Protocol references: [DeepSeek keep-alive behavior](https://api-docs.deepseek.com/quick_start/rate_limit/)
 and [Chat Completions streaming schema](https://api-docs.deepseek.com/api/create-chat-completion/).

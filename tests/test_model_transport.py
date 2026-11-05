@@ -21,6 +21,7 @@ from ctxroute.models.base import ModelFailure
 from ctxroute.models.deepseek import DeepSeekModel
 from ctxroute.models.diagnostics import WireMetadata, active_wire
 from ctxroute.models.pydantic_adapter import pydantic_transport
+from ctxroute.models.streaming import StreamTracker
 from ctxroute.orchestrator.engine import Engine
 from ctxroute.sandbox.fake import FakeSandbox
 from ctxroute.tracing.budget import Ledger
@@ -349,7 +350,9 @@ def test_failed_diagnostic_capture_never_authorizes_retry_for_http_503(tmp_path:
     assert failed["http_status"] == 503 and ledger.snapshot().reserved > 0
 
 
-def sse_body(text: str, *, done: bool = True, measured: bool = True) -> bytes:
+def sse_body(
+    text: str, *, done: bool = True, measured: bool = True, finish_reason: str = "stop"
+) -> bytes:
     def event(delta: dict[str, Any], finish: str | None = None) -> bytes:
         obj: dict[str, Any] = {
             "id": "offline-stream",
@@ -373,7 +376,7 @@ def sse_body(text: str, *, done: bool = True, measured: bool = True) -> bytes:
         + event({"role": "assistant", "reasoning_content": "private-reasoning-fixture"})
         + event({"content": text[:5]})
         + event({"content": text[5:]})
-        + event({}, "stop")
+        + event({}, finish_reason)
         + (b"data: [DONE]\r\n\r\n" if done else b"")
     )
 
@@ -554,3 +557,109 @@ def test_stream_keepalive_cannot_extend_total_deadline(
     finally:
         active_wire.reset(token)
     assert wire.sse_keepalives > 1 and wire.sse_done is False
+
+
+@pytest.mark.parametrize("finish_reason", ["length", "stop"])
+def test_thinking_only_sdk_failure_keeps_terminal_receipt_and_reservation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, finish_reason: str
+) -> None:
+    httpx = pytest.importorskip("httpx")
+    body = sse_body("", finish_reason=finish_reason)
+    calls: list[bytes] = []
+
+    class Fragments(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            for start in range(0, len(body), 7):
+                yield body[start : start + 7]
+
+    def handle(request: Any) -> Any:
+        calls.append(request.content)
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream", "x-request-id": "req-thinking-only"},
+            stream=Fragments(),
+        )
+
+    offline_http(monkeypatch, handle)
+    writer = RunWriter(tmp_path, "thinking-only", {"kind": "synthetic_test"})
+    ledger = Ledger(
+        tmp_path / "ledger.sqlite", hard_limit=Decimal(10), pause_at=Decimal(8), enabled=True
+    )
+    root = Path(__file__).resolve().parents[1]
+    model = DeepSeekModel(
+        key="synthetic-key",
+        prices=json.loads((root / "data/prices/2026-10-24.json").read_text()),
+        ledger=ledger,
+        writer=writer,
+        input_guard_tokens=100,
+        thinking="enabled",
+        transport=pydantic_transport,
+        stream=True,
+    )
+    sandbox = FakeSandbox()
+    result = Engine(
+        ArmConfig.load(root / "configs/arms/A1.yaml"),
+        model,
+        sandbox,
+        writer,
+        model_attempts=2,
+        retry_transient_only=True,
+        sleep=lambda _: pytest.fail("Definitive SDK failure must not retry"),
+    ).run(Task("synthetic-thinking", "fake/repo", "fixture", "Return JSON"), 1)
+    assert result.state.termination == "model_failure"
+    assert sandbox.commands == [] and sandbox.destroyed and len(calls) == 1
+    raw = (writer.path / "requests.jsonl").read_text()
+    reserved, failed = map(json.loads, raw.splitlines())
+    assert failed["exception_type"] == "UnexpectedModelBehavior"
+    assert failed["failure_kind"] == "response_processing"
+    assert failed["http_status"] == 200 and failed["provider_request_id"] == "req-thinking-only"
+    assert failed["sse_done"] is True
+    assert failed["stream_terminal"] == {
+        "finish_reason": finish_reason,
+        "usage": {
+            "prompt_tokens": 20,
+            "completion_tokens": 8,
+            "total_tokens": 28,
+            "prompt_cache_hit_tokens": 5,
+            "prompt_cache_miss_tokens": 15,
+        },
+        "usage_status": "valid",
+        "content_present": False,
+        "reasoning_present": True,
+        "metadata_invalid": False,
+    }
+    assert ledger.snapshot().spent == 0
+    assert ledger.snapshot().reserved == Decimal(reserved["reserved_usd"])
+    assert all(value not in raw for value in ("synthetic-key", "private-reasoning-fixture"))
+
+
+@pytest.mark.parametrize(
+    "case", ["invalid_usage", "conflicting_usage", "untrusted_finish", "bad_json"]
+)
+def test_stream_receipt_filters_untrusted_fields_and_preserves_validation_errors(case: str) -> None:
+    secret = "private-text-not-a-diagnostic"
+    tracker = StreamTracker()
+    tracker.feed(sse_body(secret, done=False))
+    event: dict[str, Any] = {"untrusted": secret}
+    if case in ("invalid_usage", "conflicting_usage"):
+        event["usage"] = {
+            "prompt_tokens": 20,
+            "completion_tokens": 9,
+            "total_tokens": 29,
+            "prompt_cache_hit_tokens": 5,
+            "prompt_cache_miss_tokens": 15,
+            "untrusted": secret,
+        }
+        if case == "invalid_usage":
+            event["usage"]["completion_tokens"] = secret
+    elif case == "untrusted_finish":
+        event["choices"] = [{"index": 0, "finish_reason": secret}]
+    body = secret.encode() if case == "bad_json" else json.dumps(event).encode()
+    tracker.feed(b"data: " + body + b"\n\ndata: [DONE]\n\n")
+    fields = tracker.terminal_fields()
+    assert tracker.done and secret not in json.dumps(fields)
+    if case.endswith("usage"):
+        assert fields["usage"] is None
+        assert fields["usage_status"] == ("invalid" if case == "invalid_usage" else "conflicting")
+    else:
+        assert fields["metadata_invalid"]

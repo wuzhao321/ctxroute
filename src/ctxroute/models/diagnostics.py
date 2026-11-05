@@ -103,6 +103,7 @@ class WireMetadata:
     sse_events: int = 0
     sse_keepalives: int = 0
     sse_done: bool = False
+    stream_terminal: dict[str, Any] | None = None
     _started: float = field(default_factory=time.monotonic, repr=False)
 
     def observe_response(self, status: int, headers: Any) -> None:
@@ -136,6 +137,7 @@ class WireMetadata:
             "sse_events": self.sse_events,
             "sse_keepalives": self.sse_keepalives,
             "sse_done": self.sse_done,
+            "stream_terminal": self.stream_terminal,
         }
 
     @staticmethod
