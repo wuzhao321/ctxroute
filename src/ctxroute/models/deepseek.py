@@ -31,12 +31,15 @@ class DeepSeekModel:
         input_guard_tokens: int,
         thinking: str,
         transport: Transport = http_transport,
+        stream: bool = False,
     ) -> None:
         if thinking not in {"enabled", "disabled"} or input_guard_tokens < 1:
             raise ValueError("Invalid model settings")
         self.key, self.prices, self.ledger = key, prices, ledger
         self.writer, self.input_guard, self.thinking = writer, input_guard_tokens, thinking
-        self.transport = transport
+        if type(stream) is not bool or (stream and transport is http_transport):
+            raise ValueError("Streaming requires a streaming-capable transport")
+        self.transport, self.stream = transport, stream
 
     def complete(self, request: ModelRequest) -> ModelResponse:
         if request.timeout_seconds <= 0:
@@ -77,7 +80,7 @@ class DeepSeekModel:
             "max_tokens": request.max_output_tokens,
             "temperature": 0,
             "thinking": {"type": self.thinking},
-            "stream": False,
+            "stream": self.stream,
         }
         if request.response_format == "json_object":
             payload["response_format"] = {"type": "json_object"}
@@ -98,6 +101,7 @@ class DeepSeekModel:
                     "tier": request.tier,
                     "model_id": model["model_id"],
                     "event": "usage",
+                    **wire.observation_fields(self.key, list(request.messages)),
                     "prompt_tokens": usage.input_tokens,
                     "cached_tokens": usage.cached_tokens,
                     "completion_tokens": usage.output_tokens,
@@ -131,6 +135,7 @@ class DeepSeekModel:
                 text.replace(self.key, "[REDACTED]"), model["model_id"], usage, elapsed, upper
             )
         except Exception as exc:
+            diagnostics = wire.failure_fields(exc, self.key, list(request.messages))
             self.writer.append(
                 "requests",
                 {
@@ -139,13 +144,19 @@ class DeepSeekModel:
                     "purpose": request.purpose,
                     "event": "failed",
                     "error_type": "model_request_failed",
-                    **wire.failure_fields(exc, self.key, list(request.messages)),
+                    **diagnostics,
                     "latency_ms": (time.monotonic() - timer) * 1000,
                     "ended_at": datetime.now(UTC).isoformat(),
                 },
             )
             raise ModelFailure(
-                "Model request failed; inspect numeric usage and reservations"
+                "Model request failed; inspect numeric usage and reservations",
+                retryable=diagnostics["failure_kind"] != "diagnostic_capture_failed"
+                and (
+                    diagnostics["failure_kind"]
+                    in {"connection_error", "timeout", "incomplete_stream", "rate_limit"}
+                    or diagnostics["http_status"] in {500, 502, 503, 504}
+                ),
             ) from None
         finally:
             active_wire.reset(token)

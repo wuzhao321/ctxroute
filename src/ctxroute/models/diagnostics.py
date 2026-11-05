@@ -1,8 +1,9 @@
 """Per-call HTTP observations and value-limited model failure records."""
 
 import re
+import time
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, cast
 from urllib.error import HTTPError, URLError
 
@@ -28,6 +29,9 @@ _SAFE_MESSAGES = _USAGE_ERRORS | {
     "Provider price exceeded reservation",
     "Expected fixed probe or two-message context envelope",
     "Unsupported response format",
+    "Stream ended without completion marker",
+    "SSE event exceeded byte limit",
+    "Response exceeded byte limit",
 }
 _BODY_VALUES = {
     "rate_limit_exceeded",
@@ -89,11 +93,63 @@ class WireMetadata:
     request_body_bytes: int | None = None
     http_status: int | None = None
     provider_request_id: str | None = None
+    streaming: bool = False
+    response_bytes_received: int = 0
+    response_chunks_received: int = 0
+    response_completed: bool = False
+    headers_after_ms: float | None = None
+    first_byte_after_ms: float | None = None
+    last_byte_after_ms: float | None = None
+    sse_events: int = 0
+    sse_keepalives: int = 0
+    sse_done: bool = False
+    _started: float = field(default_factory=time.monotonic, repr=False)
 
     def observe_response(self, status: int, headers: Any) -> None:
         self.http_status = status
+        self.headers_after_ms = (time.monotonic() - self._started) * 1000
         if headers is not None:
             self.provider_request_id = headers.get("x-request-id") or headers.get("x-ds-trace-id")
+
+    def observe_chunk(self, size: int) -> None:
+        self.response_bytes_received += size
+        self.response_chunks_received += 1
+        self.last_byte_after_ms = (time.monotonic() - self._started) * 1000
+        if self.first_byte_after_ms is None:
+            self.first_byte_after_ms = self.last_byte_after_ms
+
+    def observation_fields(self, key: str, messages: list[dict[str, str]]) -> dict[str, Any]:
+        request_id = self.provider_request_id
+        if not self._safe_request_id(request_id, key, messages):
+            request_id = None
+        return {
+            "http_status": self.http_status,
+            "provider_request_id": request_id,
+            "request_body_bytes": self.request_body_bytes,
+            "streaming": self.streaming,
+            "response_bytes_received": self.response_bytes_received,
+            "response_chunks_received": self.response_chunks_received,
+            "response_completed": self.response_completed,
+            "headers_after_ms": self.headers_after_ms,
+            "first_byte_after_ms": self.first_byte_after_ms,
+            "last_byte_after_ms": self.last_byte_after_ms,
+            "sse_events": self.sse_events,
+            "sse_keepalives": self.sse_keepalives,
+            "sse_done": self.sse_done,
+        }
+
+    @staticmethod
+    def _safe_request_id(request_id: str | None, key: str, messages: list[dict[str, str]]) -> bool:
+        if not isinstance(request_id, str) or not request_id:
+            return False
+        return not (
+            not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}", request_id)
+            or request_id.lower().startswith(("sk-", "bearer", "cookie", "authorization"))
+            or (key and key in request_id)
+            or any(
+                request_id in m["content"] for m in messages if isinstance(m.get("content"), str)
+            )
+        )
 
     def failure_fields(
         self, exc: Exception, key: str, messages: list[dict[str, str]]
@@ -104,6 +160,7 @@ class WireMetadata:
             # Some SDK exceptions expose lazy attributes. Preserve the original failure
             # and reservation even when their diagnostic information cannot be inspected.
             return {
+                **self.observation_fields(key, messages),
                 "failure_kind": "diagnostic_capture_failed",
                 "exception_type": type(exc).__name__,
                 "exception_message": None,
@@ -132,14 +189,7 @@ class WireMetadata:
             (value for e in chain if isinstance(value := getattr(e, "request_id", None), str)),
             None,
         )
-        if request_id and (
-            not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}", request_id)
-            or request_id.lower().startswith(("sk-", "bearer", "cookie", "authorization"))
-            or (key and key in request_id)
-            or any(
-                request_id in m["content"] for m in messages if isinstance(m.get("content"), str)
-            )
-        ):
+        if not self._safe_request_id(request_id, key, messages):
             request_id = None
         kind = "unknown"
         if timed_out:
@@ -148,11 +198,19 @@ class WireMetadata:
             kind = "rate_limit" if status == 429 else "http_error"
         elif any(_safe_message(e) in _USAGE_ERRORS for e in chain):
             kind = "invalid_usage"
-        elif {"ConnectError", "APIConnectionError", "ConnectionRefusedError"} & set(names):
+        elif {
+            "ConnectError",
+            "APIConnectionError",
+            "ConnectionRefusedError",
+            "RemoteProtocolError",
+        } & set(names):
             kind = "connection_error"
+        elif "IncompleteStreamError" in names:
+            kind = "incomplete_stream"
         elif isinstance(exc, (ValueError, KeyError)) or status is not None:
             kind = "validation_error" if status is None else "response_processing"
         return {
+            **self.observation_fields(key, messages),
             "failure_kind": kind,
             "exception_type": names[0],
             "exception_message": _safe_message(exc),

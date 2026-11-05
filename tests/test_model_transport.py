@@ -1,5 +1,7 @@
 """Offline wire test through installed SDKs; no real key, socket, or provider call."""
 
+import asyncio
+import gzip
 import json
 import socket
 import urllib.request
@@ -13,11 +15,14 @@ from urllib.error import HTTPError
 import pytest
 
 from ctxroute.api_probe import http_transport
-from ctxroute.domain import ModelRequest
+from ctxroute.config import ArmConfig
+from ctxroute.domain import ModelRequest, Task
 from ctxroute.models.base import ModelFailure
 from ctxroute.models.deepseek import DeepSeekModel
 from ctxroute.models.diagnostics import WireMetadata, active_wire
 from ctxroute.models.pydantic_adapter import pydantic_transport
+from ctxroute.orchestrator.engine import Engine
+from ctxroute.sandbox.fake import FakeSandbox
 from ctxroute.tracing.budget import Ledger
 from ctxroute.tracing.writer import RunWriter
 
@@ -296,3 +301,256 @@ def test_unavailable_exception_metadata_still_returns_safe_fields() -> None:
     assert fields["http_status"] == 503 and fields["exception_type"] == "Uninspectable"
     assert fields["is_timeout"] is None and fields["provider_request_id"] is None
     assert "private" not in json.dumps(fields)
+
+
+def test_failed_diagnostic_capture_never_authorizes_retry_for_http_503(tmp_path: Path) -> None:
+    class Uninspectable(RuntimeError):
+        @property
+        def body(self) -> str:
+            raise RuntimeError("private detail")
+
+    def transport(payload: dict[str, Any], key: str, timeout: int) -> dict[str, Any]:
+        wire = active_wire.get()
+        assert wire is not None
+        wire.observe_response(503, {})
+        raise Uninspectable()
+
+    writer = RunWriter(tmp_path, "diagnostic-stop", {"kind": "synthetic_test"})
+    ledger = Ledger(
+        tmp_path / "ledger.sqlite", hard_limit=Decimal(10), pause_at=Decimal(8), enabled=True
+    )
+    model = DeepSeekModel(
+        key="fake",
+        prices=json.loads(
+            (Path(__file__).resolve().parents[1] / "data/prices/2026-10-24.json").read_text()
+        ),
+        ledger=ledger,
+        writer=writer,
+        input_guard_tokens=100,
+        thinking="enabled",
+        transport=transport,
+    )
+    with pytest.raises(ModelFailure) as raised:
+        model.complete(
+            ModelRequest(
+                ({"role": "user", "content": "fixture"},),
+                "strong",
+                "action",
+                32,
+                1,
+                "diagnostic-stop",
+                1,
+                Decimal("0.20"),
+            )
+        )
+    assert raised.value.retryable is False
+    failed = json.loads((writer.path / "requests.jsonl").read_text().splitlines()[-1])
+    assert failed["failure_kind"] == "diagnostic_capture_failed"
+    assert failed["http_status"] == 503 and ledger.snapshot().reserved > 0
+
+
+def sse_body(text: str, *, done: bool = True, measured: bool = True) -> bytes:
+    def event(delta: dict[str, Any], finish: str | None = None) -> bytes:
+        obj: dict[str, Any] = {
+            "id": "offline-stream",
+            "object": "chat.completion.chunk",
+            "created": 1,
+            "model": "deepseek-v4-pro",
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
+        }
+        if finish and measured:
+            obj["usage"] = {
+                "prompt_tokens": 20,
+                "completion_tokens": 8,
+                "total_tokens": 28,
+                "prompt_cache_hit_tokens": 5,
+                "prompt_cache_miss_tokens": 15,
+            }
+        return b"data: " + json.dumps(obj, ensure_ascii=False).encode() + b"\r\n\r\n"
+
+    return (
+        b": keep-alive\r\n\r\n"
+        + event({"role": "assistant", "reasoning_content": "private-reasoning-fixture"})
+        + event({"content": text[:5]})
+        + event({"content": text[5:]})
+        + event({}, "stop")
+        + (b"data: [DONE]\r\n\r\n" if done else b"")
+    )
+
+
+@pytest.mark.parametrize(
+    "case", ["complete", "gzip", "disconnect", "missing_done", "missing_usage", "empty_stream"]
+)
+def test_stream_requires_completion_and_usage_and_preserves_partial_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: str
+) -> None:
+    httpx = pytest.importorskip("httpx")
+    captured: list[dict[str, Any]] = []
+    action = '{"tool":"bash","command":"printf café"}'
+    body = sse_body(action, done=case != "missing_done", measured=case != "missing_usage")
+    if case == "empty_stream":
+        body = b": keep-alive\r\n\r\n"
+    if case == "gzip":
+        body = gzip.compress(body)
+
+    class Fragments(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            for start in range(0, len(body), 7):
+                if case == "disconnect" and start > 80:
+                    raise httpx.RemoteProtocolError("private-reasoning-fixture incomplete body")
+                yield body[start : start + 7]
+
+    def handle(request: Any) -> Any:
+        captured.append(json.loads(request.content))
+        headers = {"content-type": "text/event-stream", "x-request-id": "req-stream-test"}
+        if case == "gzip":
+            headers["content-encoding"] = "gzip"
+        return httpx.Response(200, headers=headers, stream=Fragments())
+
+    offline_http(monkeypatch, handle)
+    writer = RunWriter(tmp_path, "stream-test", {"kind": "synthetic_test"})
+    ledger = Ledger(
+        tmp_path / "budget.sqlite", hard_limit=Decimal(10), pause_at=Decimal(8), enabled=True
+    )
+    model = DeepSeekModel(
+        key="fake-stream-key",
+        prices=json.loads(
+            (Path(__file__).resolve().parents[1] / "data/prices/2026-10-24.json").read_text()
+        ),
+        ledger=ledger,
+        writer=writer,
+        input_guard_tokens=100,
+        thinking="enabled",
+        transport=pydantic_transport,
+        stream=True,
+    )
+    request = ModelRequest(
+        ({"role": "user", "content": "Synthetic JSON action"},),
+        "strong",
+        "action",
+        32,
+        10,
+        "stream-test",
+        1,
+        Decimal("0.20"),
+        response_format="json_object",
+    )
+    if case in ("complete", "gzip"):
+        assert model.complete(request).text == action
+        assert ledger.snapshot().spent > 0 and ledger.snapshot().reserved == 0
+    else:
+        with pytest.raises(ModelFailure) as raised:
+            model.complete(request)
+        assert raised.value.retryable is (case in ("disconnect", "missing_done", "empty_stream"))
+        assert ledger.snapshot().spent == 0 and ledger.snapshot().reserved > 0
+    raw = (writer.path / "requests.jsonl").read_text()
+    events = [json.loads(line) for line in raw.splitlines()]
+    last = events[-1]
+    assert len(captured) == 1 and captured[0]["stream"] is True
+    assert captured[0]["stream_options"] == {"include_usage": True}
+    assert captured[0]["max_tokens"] == 32 and captured[0]["thinking"] == {"type": "enabled"}
+    assert last["http_status"] == 200 and last["provider_request_id"] == "req-stream-test"
+    assert last["streaming"] is True and last["response_bytes_received"] > 0
+    assert last["response_chunks_received"] > 0 and last["first_byte_after_ms"] is not None
+    assert last["sse_keepalives"] == 1
+    assert last["sse_done"] is (case in ("complete", "gzip", "missing_usage"))
+    for secret in ("fake-stream-key", "private-reasoning-fixture", "Synthetic JSON action"):
+        assert secret not in raw
+
+
+@pytest.mark.parametrize("guard_tokens", [100, 100_000])
+def test_interrupted_stream_retries_once_with_separate_retained_reservation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, guard_tokens: int
+) -> None:
+    httpx = pytest.importorskip("httpx")
+    calls = 0
+
+    def handle(request: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        # A plausible complete action without DONE must never be executed.
+        text = '{"tool":"bash","command":"touch partial"}' if calls == 1 else '{"tool":"submit"}'
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream", "x-request-id": f"req-{calls}"},
+            content=sse_body(text, done=calls != 1),
+        )
+
+    offline_http(monkeypatch, handle)
+    root = Path(__file__).resolve().parents[1]
+    writer = RunWriter(tmp_path, "stream-retry", {"kind": "synthetic_test"})
+    ledger = Ledger(
+        tmp_path / "budget.sqlite", hard_limit=Decimal(10), pause_at=Decimal(8), enabled=True
+    )
+    model = DeepSeekModel(
+        key="fake-key",
+        prices=json.loads((root / "data/prices/2026-10-24.json").read_text()),
+        ledger=ledger,
+        writer=writer,
+        input_guard_tokens=guard_tokens,
+        thinking="enabled",
+        transport=pydantic_transport,
+        stream=True,
+    )
+    sandbox = FakeSandbox()
+    result = Engine(
+        ArmConfig.load(root / "configs/arms/A1.yaml"),
+        model,
+        sandbox,
+        writer,
+        model_attempts=2,
+        retry_transient_only=True,
+        sleep=lambda _: None,
+    ).run(Task("synthetic-stream", "fake/repo", "fixture", "Return JSON"), 1)
+    assert sandbox.commands == [] and sandbox.destroyed
+    records = [
+        json.loads(line) for line in (writer.path / "requests.jsonl").read_text().splitlines()
+    ]
+    if guard_tokens == 100:
+        assert result.state.termination == "submitted" and calls == 2
+        assert [r["event"] for r in records] == ["reserved", "failed", "reserved", "usage"]
+        assert records[0]["request_id"] != records[2]["request_id"]
+        assert ledger.snapshot().spent > 0
+    else:
+        assert result.state.termination == "budget_limit" and calls == 1
+        assert [r["event"] for r in records] == ["reserved", "failed"]
+        assert ledger.snapshot().spent == 0
+    assert ledger.snapshot().reserved == Decimal(records[0]["reserved_usd"])
+
+
+def test_stream_keepalive_cannot_extend_total_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    httpx = pytest.importorskip("httpx")
+
+    class KeepAlive(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            while True:
+                yield b": keep-alive\n\n"
+                await asyncio.sleep(0.01)
+
+    offline_http(
+        monkeypatch,
+        lambda _: httpx.Response(
+            200, headers={"content-type": "text/event-stream"}, stream=KeepAlive()
+        ),
+    )
+    wire = WireMetadata()
+    token = active_wire.set(wire)
+    try:
+        with pytest.raises(TimeoutError):
+            pydantic_transport(
+                {
+                    "model": "deepseek-v4-pro",
+                    "thinking": {"type": "enabled"},
+                    "messages": [{"role": "user", "content": "fixture"}],
+                    "max_tokens": 32,
+                    "temperature": 0,
+                    "stream": True,
+                },
+                "fake-key",
+                1,
+            )
+    finally:
+        active_wire.reset(token)
+    assert wire.sse_keepalives > 1 and wire.sse_done is False

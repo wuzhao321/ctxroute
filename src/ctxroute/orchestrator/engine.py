@@ -3,7 +3,7 @@
 import json
 import time
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 
 from ctxroute.config import ArmConfig
 from ctxroute.context.artifacts import ArtifactStore, truncate
@@ -11,6 +11,7 @@ from ctxroute.context.manager import ContextLimit, ContextManager, Memory
 from ctxroute.context.memory import MEMORY_SCHEMA, MEMORY_VERSION
 from ctxroute.domain import Action, ModelRequest, ModelResponse, RunState, Step, Task, Tier
 from ctxroute.models.base import Model, ModelFailure
+from ctxroute.orchestrator.action_recovery import without_prompt_echo
 from ctxroute.orchestrator.progress import ProgressTracker
 from ctxroute.router.rules import CLASSIFIER_VERSION, RuleRouter, classify
 from ctxroute.sandbox.base import Sandbox
@@ -79,6 +80,8 @@ class Engine:
         sleep: Callable[[float], None] = time.sleep,
         model_attempts: int = 2,
         backoff_seconds: float = 0.5,
+        retry_transient_only: bool = False,
+        recover_action_metadata: bool = False,
     ) -> None:
         if config.engine != "ctxroute":
             raise ValueError("External and optional arms require their own adapter")
@@ -87,6 +90,8 @@ class Engine:
         self.cfg, self.model, self.sandbox, self.writer = config, model, sandbox, writer
         self.clock, self.sleep = clock, sleep
         self.model_attempts, self.backoff = model_attempts, backoff_seconds
+        self.retry_transient_only = retry_transient_only
+        self.recover_action_metadata = recover_action_metadata
 
     def run(self, task: Task, seed: int) -> RunResult:
         cfg, limits = self.cfg, self.cfg.limits
@@ -133,7 +138,10 @@ class Engine:
                     if self.clock() >= deadline:
                         raise TimeoutError("Model exceeded remaining run time")
                     return answer
-                except ModelFailure:
+                except ModelFailure as exc:
+                    will_retry = attempt + 1 < self.model_attempts and (
+                        not self.retry_transient_only or exc.retryable
+                    )
                     self.writer.append(
                         "lifecycle",
                         {
@@ -141,9 +149,11 @@ class Engine:
                             "step": state.step,
                             "purpose": purpose,
                             "attempt": attempt + 1,
+                            "retryable": exc.retryable,
+                            "will_retry": will_retry,
                         },
                     )
-                    if attempt + 1 >= self.model_attempts:
+                    if not will_retry:
                         raise
                     delay = self.backoff * (2**attempt)
                     if self.clock() + delay >= deadline:
@@ -235,8 +245,30 @@ class Engine:
                     "cost_upper_usd": str(result.cost_upper),
                 }
                 try:
-                    action = Action.parse(result.text, recall_enabled=cfg.context.mode != "none")
-                    context.remember(action.remember, state.history)
+                    action_text = result.text
+                    if self.recover_action_metadata:
+                        action_text, echo_removed = without_prompt_echo(
+                            action_text, context.progress
+                        )
+                        event["action_recovery"] = {"exact_prompt_echo_removed": echo_removed}
+                    action = Action.parse(action_text, recall_enabled=cfg.context.mode != "none")
+                    try:
+                        context.remember(action.remember, state.history)
+                    except ValueError as exc:
+                        if not self.recover_action_metadata:
+                            raise
+                        # remember() validates atomically. Reject all optional notes, while
+                        # retaining the schema-validated command without changing its text.
+                        action = replace(action, remember=())
+                        event["memory_validation_error"] = str(exc)
+                        self.writer.append(
+                            "lifecycle",
+                            {
+                                "event": "optional_memory_rejected",
+                                "step": number,
+                                "error_type": "invalid_remember",
+                            },
+                        )
                 except ValueError as exc:
                     format_failures += 1
                     step = Step(

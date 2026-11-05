@@ -1,10 +1,12 @@
 """Optional PydanticAI transport for the same budgeted DeepSeekModel boundary."""
 
 import asyncio
+from collections.abc import AsyncIterator
 from importlib import import_module
 from typing import Any
 
-from ctxroute.models.diagnostics import active_wire
+from ctxroute.models.diagnostics import WireMetadata, active_wire
+from ctxroute.models.streaming import IncompleteStreamError, StreamTracker
 
 
 def pydantic_transport(payload: dict[str, Any], key: str, timeout: int) -> dict[str, Any]:
@@ -24,19 +26,49 @@ def pydantic_transport(payload: dict[str, Any], key: str, timeout: int) -> dict[
         providers = import_module("pydantic_ai.providers.deepseek")
         httpx = import_module("httpx")
         usage_types = import_module("pydantic_ai.usage")
-        wire = active_wire.get()
+        wire = active_wire.get() or WireMetadata()
+        streaming = payload.get("stream", False)
+        if type(streaming) is not bool:
+            raise ValueError("Invalid stream option")
+        wire.streaming = streaming
+        tracker = StreamTracker()
 
         async def observe_request(request: Any) -> None:
-            if wire is not None:
-                # The SDK sends a buffered JSON body. Never materialize a stream for logging.
-                try:
-                    wire.request_body_bytes = len(request.content)
-                except httpx.RequestNotRead:
-                    pass
+            # The SDK sends a buffered JSON body. Never materialize a stream for logging.
+            try:
+                wire.request_body_bytes = len(request.content)
+            except httpx.RequestNotRead:
+                pass
 
         async def observe_response(response: Any) -> None:
-            if wire is not None:
-                wire.observe_response(response.status_code, response.headers)
+            wire.observe_response(response.status_code, response.headers)
+            original_bytes = response.aiter_bytes
+
+            def observe(chunk: bytes) -> None:
+                wire.observe_chunk(len(chunk))
+                if wire.response_bytes_received > 16 * 1024 * 1024:
+                    raise ValueError("Response exceeded byte limit")
+                if streaming:
+                    tracker.feed(chunk)
+                    wire.sse_events = tracker.events
+                    wire.sse_keepalives = tracker.keepalives
+                    wire.sse_done = tracker.done
+
+            if response.is_stream_consumed:
+                # Mock/cached responses have already been decoded by HTTPX.
+                observe(response.content)
+                wire.response_completed = True
+                return
+
+            async def measured_bytes(chunk_size: int | None = None) -> AsyncIterator[bytes]:
+                # Observe decoded bytes, so gzip and split UTF-8/SSE frames also work.
+                # Never save the response text or reasoning stream in diagnostics.
+                async for chunk in original_bytes(chunk_size):
+                    observe(chunk)
+                    yield chunk
+                wire.response_completed = True
+
+            response.aiter_bytes = measured_bytes
 
         client = openai.AsyncOpenAI(
             api_key=key,
@@ -68,18 +100,40 @@ def pydantic_transport(payload: dict[str, Any], key: str, timeout: int) -> dict[
                 profile={"openai_chat_supports_max_completion_tokens": False},
             )
             agent = sdk.Agent(model, system_prompt=system_prompt, output_type=str, retries=0)
-            result = await agent.run(
-                user_prompt,
-                usage_limits=usage_types.UsageLimits(request_limit=1),
-                model_settings={
-                    "max_tokens": payload["max_tokens"],
-                    "temperature": payload["temperature"],
-                    "timeout": timeout,
-                    "max_retries": 0,
-                    "extra_body": extra_body,
-                },
-            )
-            usage = result.usage
+            settings = {
+                "max_tokens": payload["max_tokens"],
+                "temperature": payload["temperature"],
+                "timeout": timeout,
+                "max_retries": 0,
+                "extra_body": extra_body,
+            }
+            # A server sending keep-alives must not extend the run deadline forever.
+            async with asyncio.timeout(timeout):
+                if streaming:
+                    try:
+                        async with agent.run_stream(
+                            user_prompt,
+                            usage_limits=usage_types.UsageLimits(request_limit=1),
+                            model_settings=settings,
+                        ) as result:
+                            output = await result.get_output()
+                            usage, response = result.usage, result.response
+                    except Exception as exc:
+                        if wire.http_status == 200 and wire.response_completed and not tracker.done:
+                            # SDKs may report "no output" after a clean but incomplete EOF.
+                            raise IncompleteStreamError(
+                                "Stream ended without completion marker"
+                            ) from exc
+                        raise
+                    if not tracker.done:
+                        raise IncompleteStreamError("Stream ended without completion marker")
+                else:
+                    result = await agent.run(
+                        user_prompt,
+                        usage_limits=usage_types.UsageLimits(request_limit=1),
+                        model_settings=settings,
+                    )
+                    output, usage, response = result.output, result.usage, result.response
             if getattr(usage, "unmeasured_requests", 1) != 0 or usage.requests != 1:
                 raise ValueError("Missing usage or hidden additional SDK requests")
             cached = usage.details.get("prompt_cache_hit_tokens")
@@ -89,8 +143,8 @@ def pydantic_transport(payload: dict[str, Any], key: str, timeout: int) -> dict[
             return {
                 "choices": [
                     {
-                        "finish_reason": result.response.finish_reason,
-                        "message": {"content": result.output},
+                        "finish_reason": response.finish_reason,
+                        "message": {"content": output},
                     }
                 ],
                 "usage": {
