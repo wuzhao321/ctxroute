@@ -28,6 +28,7 @@ def project(tmp_path: Path) -> Path:
     save_new_key(tmp_path, DEMO_KEY)
     budget_path = tmp_path / "configs/budget.json"
     budget = json.loads(budget_path.read_text())
+    budget.pop("active_stage_config", None)  # This fixture exercises the legacy campaign.
     budget["paid_execution_enabled"] = True
     budget_path.write_text(json.dumps(budget))
     return tmp_path

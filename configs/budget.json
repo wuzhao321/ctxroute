@@ -9,6 +9,7 @@
     "cloud_storage",
     "network"
   ],
-  "paid_execution_enabled": true,
-  "note": "Campaign-wide limits include API, compute, storage and network costs. Reserve the worst-case request cost before dispatch and retain reservations until usage is known."
+  "paid_execution_enabled": false,
+  "active_stage_config": "configs/budgets/stage-cny45.json",
+  "note": "USD limits above belong to the legacy campaign. When selected, active_stage_config supplies independent limits. Retain all historical charges and unknown reservations; execution needs separate authorization."
 }

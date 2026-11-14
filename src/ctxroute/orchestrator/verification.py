@@ -1,0 +1,149 @@
+"""Conservative test evidence, independent of routing and command execution.
+
+Scopes describe invocations, not proven behavioral coverage. Opaque shell programs
+can supply failure evidence but cannot earn a pass from their outer exit alone.
+"""
+
+import hashlib
+import re
+import shlex
+from dataclasses import asdict, dataclass
+from typing import Any
+
+from ctxroute.domain import Observation
+from ctxroute.router.rules import classify
+
+
+@dataclass(frozen=True)
+class CheckEvidence:
+    command: str
+    scope: str
+    targets: tuple[str, ...]
+    runner: str
+    options: tuple[str, ...]
+    outcome: str
+    exit_code: int
+    test_exit_code: int | None
+    attribution: str
+    patch_sha256_before: str
+    patch_sha256_after: str
+    step: int
+
+    def record(self) -> dict[str, Any]:
+        return asdict(self)
+
+    def covers(self, other: "CheckEvidence") -> bool:
+        if self.scope == other.scope:
+            return True
+        return (
+            self.runner == other.runner == "pytest"
+            and self.options == other.options
+            and bool(self.targets)
+            and bool(other.targets)
+            and set(other.targets) <= set(self.targets)
+        )
+
+
+def _invocation(command: str) -> tuple[str, tuple[str, ...], tuple[str, ...]] | None:
+    if any(c in command for c in ";|><`$\n&\\"):
+        return None
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        return None
+    if words[:2] in (["python", "-m"], ["python3", "-m"]):
+        words = words[2:]
+    if not words or words[0] not in {"pytest", "unittest", "tox", "pylint"}:
+        return None
+    runner, args = words[0], words[1:]
+    if any(arg in {"--collect-only", "--co", "--help", "-h", "--version", "-V"} for arg in args):
+        return None
+    # Only simple explicit pytest selectors admit subset comparison. Options that
+    # alter selection/configuration keep an exact invocation scope instead.
+    selectors = tuple(arg for arg in args if arg not in {"-q", "-v", "-vv"})
+    if runner == "pytest" and all(not arg.startswith("-") for arg in selectors):
+        return runner, selectors, ()
+    return runner, (), tuple(args)
+
+
+def observe_check(
+    command: str, observation: Observation, before: str, after: str, step: int
+) -> CheckEvidence | None:
+    if observation.timed_out or observation.output_limited:
+        return None
+    invocation = _invocation(command)
+    scope_command = command
+    attribution = "direct_exit"
+    if invocation is None and "&&" in command:
+        parts = [part.strip() for part in command.split("&&")]
+        # A successful read prefix followed by a final test is common. A failing
+        # prefix is not attributed to the test unless framework output exists.
+        prefixes = parts[:-1]
+        if all(
+            classify(part) == "read"
+            or re.fullmatch(r"git diff(?: --)?(?: [a-zA-Z0-9_./-]+)*", part)
+            or re.fullmatch(r"cd (?:-- )?(?:/|\.)[a-zA-Z0-9_./-]*", part)
+            for part in prefixes
+        ):
+            invocation = _invocation(parts[-1])
+            # Retain cd in the scope: identical relative paths in other working
+            # directories are not the same tests.
+            scope_command = " && ".join([p for p in prefixes if p.startswith("cd ")] + parts[-1:])
+            attribution = "final_test_after_read_prefix"
+    output = observation.output
+    summary = bool(
+        re.search(
+            r"\b\d+ (?:passed|failed|errors?)\b|\b(?:FAILED|ERROR) (?:tests?/|collecting)", output
+        )
+    )
+    diagnostic_failure = bool(
+        re.search(
+            r"\b[1-9]\d* (?:failed|errors?)\b|\b(?:FAILED|ERROR) (?:tests?/|collecting)", output
+        )
+        or re.search(r"(?m)^.+:\d+:\d+: [EF]\d{4}:", output)
+    )
+    direct = invocation is not None
+    if not direct:
+        # Do not parse arbitrary shell or Python. Record a conservative scoped
+        # failure when a check-like command and its diagnostic agree.
+        if (
+            classify(command) == "read"
+            or not diagnostic_failure
+            or not re.search(r"\b(?:pytest|unittest|pylint)\b", command)
+        ):
+            return None
+        runner, targets, options = "opaque_check", (), ()
+        outcome, attribution = "failed", "diagnostic_in_compound_command"
+    else:
+        assert invocation is not None
+        runner, targets, options = invocation
+        if (
+            attribution != "direct_exit"
+            and observation.exit_code
+            and not summary
+            and not diagnostic_failure
+        ):
+            return None
+        outcome = "failed" if observation.exit_code or diagnostic_failure else "passed"
+    scope = hashlib.sha256(scope_command.strip().encode()).hexdigest()
+    if direct and not scope_command.startswith("cd "):
+        scope = hashlib.sha256(repr((runner, targets, options)).encode()).hexdigest()
+    elif scope_command.startswith("cd "):
+        # No selector subset inference across working directories.
+        targets, options = (), (scope_command,)
+    return CheckEvidence(
+        command,
+        scope,
+        targets,
+        runner,
+        options,
+        outcome,
+        observation.exit_code,
+        observation.exit_code
+        if direct and not (diagnostic_failure and not observation.exit_code)
+        else None,
+        attribution,
+        hashlib.sha256(before.encode()).hexdigest(),
+        hashlib.sha256(after.encode()).hexdigest(),
+        step,
+    )

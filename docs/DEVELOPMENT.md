@@ -24,7 +24,16 @@ sh scripts/check.sh
 
 ## 验证范围
 
-tests/ 覆盖成本计算与账本、配置与数据边界、上下文和路由、执行器、沙箱接口、模型传输和离线工作流。模型传输测试用 HTTP 拦截器验证请求字段与 usage，无需真实密钥。固定响应模型和临时工作区用于验证控制流程。
+tests/ 覆盖成本计算与阶段分配、配置与数据边界、上下文和路由、执行器、沙箱接口、模型传输和离线工作流。固定响应模型和临时工作区用于验证控制流程。
+
+| 检查范围 | 相关测试 |
+|---|---|
+| 请求字段、流式完成条件、SDK 与原始回执一致性、未知用量预留 | `test_model_transport.py`、`test_stream_receipt.py`、`test_stream_acceptance.py`、`test_reasoning_usage.py` |
+| 阶段身份、并发分配、硬上限及暂停阈值 | `test_budget.py`、`test_stage_budget.py` |
+| 检查退出码归因、diff 绑定、失败保留及目标和回归范围 | `test_verification.py`、`test_repair_evidence.py`、`test_repair_policy.py`、`test_target_action.py` |
+| 可选编辑检查点、源码决策、动作历史及信息组织 | `test_first_edit.py`、`test_post_edit.py`、`test_source_decision.py`、`test_action_context.py`、`test_efficiency.py` |
+
+模型传输测试使用合成凭据、HTTP 拦截器和内存流，不发送真实模型请求。无效用量用例可能触发 SDK 的用量提取警告，应结合对应断言判断，不能将缺失或非法用量当作零费用。
 
 这些检查验证实现行为。任务修复以独立官方 SWE-bench harness 的 resolved 结果判定；完整流程还需单独准备匹配镜像、审计隔离条件及输入字段。基准数据的 gold patch、隐藏测试与判分脚本只进入独立判分环境。
 

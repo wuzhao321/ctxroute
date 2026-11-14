@@ -38,6 +38,22 @@ docs/RETEST_20261025.md
 
 artifacts/demos/
 
+# Runtime outputs also stay local when created outside results/.
+/artifacts/
+/logs/
+/runs/
+/predictions/
+/reports/
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal
+trace.jsonl
+requests.jsonl
+predictions.jsonl
+grade.json
+
 # Sanitized runtime inputs and environment-specific registries stay local.
 data/private/
 configs/private/

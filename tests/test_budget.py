@@ -17,7 +17,7 @@ def test_disabled_and_threshold(tmp_path: Path) -> None:
         ledger(path, False).reserve("disabled", D("0.1"), "model_api")
     book = ledger(path)
     book.reserve("cloud", D("6"), "cloud_compute")
-    with pytest.raises(BudgetStopped, match="80%"):
+    with pytest.raises(BudgetStopped, match="pause threshold"):
         book.reserve("api", D("2"), "model_api")
     with pytest.raises(BudgetStopped, match="hard limit"):
         book.reserve("large", D("5"), "model_api")

@@ -9,20 +9,21 @@ ctxroute 是面向软件工程 Agent 的实验框架，用于研究结构化上�
 - **Agent 执行与对照策略**：适配 mini-swe-agent 原生执行循环，并提供 A1–A5 配置，覆盖固定模型、结构化压缩、规则路由及组合策略。
 - **上下文与记忆管理**：划分系统任务、固定证据、结构化摘要和近期步骤，支持历史输出存储、证据引用与按需召回。
 - **步骤级模型路由**：依据命令类型、执行结果和连续步骤状态选择模型层级，通过统一接口接入模型服务。
-- **工具与隔离执行**：提供 Docker 沙箱与 MCP 工具接口，管理命令执行、资源限制、补丁提取和容器生命周期；动作协议与进展控制负责校验输出和处理重复动作。
-- **实验编排与分析**：提供实验清单冻结、任务级续跑、费用预留与结算、请求和步骤轨迹、预测导出、SWE-bench 官方判分对接、消融配置和配对统计分析。
+- **工具与验证**：提供 Docker 沙箱与 MCP 工具接口，管理命令执行、资源限制、补丁提取和容器生命周期；支持重复动作控制、与当前 diff 绑定的测试证据，以及可选的公开目标和回归验证策略。
+- **模型请求与预算**：支持有界流式传输、终结回执校验、失败诊断、显式重试，以及按运行范围和阶段分配的费用预留与结算。
+- **实验编排与分析**：提供实验清单冻结、任务级续跑、预测导出、SWE-bench 官方判分对接、消融配置和配对统计分析。
 
 ## 项目结构
 
 | 路径 | 内容 |
 |---|---|
-| [src/ctxroute/orchestrator/](src/ctxroute/orchestrator/) | Agent 主循环、终止规则与进展控制 |
+| [src/ctxroute/orchestrator/](src/ctxroute/orchestrator/) | Agent 主循环、进展控制、公开测试证据与提交条件 |
 | [src/ctxroute/context/](src/ctxroute/context/) | 上下文分区、结构化记忆、压缩与历史输出召回 |
 | [src/ctxroute/router/](src/ctxroute/router/) | 模型层级选择规则 |
-| [src/ctxroute/models/](src/ctxroute/models/) | 模型请求协议、DeepSeek 与 PydanticAI 传输适配 |
+| [src/ctxroute/models/](src/ctxroute/models/) | 模型请求协议、DeepSeek 与 PydanticAI 传输适配、流式回执与诊断 |
 | [src/ctxroute/baselines/](src/ctxroute/baselines/) | mini-swe-agent 基线适配 |
 | [src/ctxroute/sandbox/](src/ctxroute/sandbox/) / [tools/](src/ctxroute/tools/) | Docker 沙箱与 MCP 客户端、服务端 |
-| [src/ctxroute/tracing/](src/ctxroute/tracing/) | 预算账本、调用成本与运行轨迹 |
+| [src/ctxroute/tracing/](src/ctxroute/tracing/) | 运行与阶段预算、调用成本和轨迹记录 |
 | [src/ctxroute/evalkit/](src/ctxroute/evalkit/) | 实验编排、复现流程、判分交接与统计分析 |
 | [src/ctxroute/cli.py](src/ctxroute/cli.py) | 命令行入口 |
 | [configs/](configs/) | 实验臂、消融、模型运行、预算与沙箱配置 |
@@ -37,6 +38,9 @@ ctxroute 是面向软件工程 Agent 的实验框架，用于研究结构化上�
 |---|---|
 | [ARCHITECTURE](docs/ARCHITECTURE.md) | 整体架构、模块职责与数据流 |
 | [MODEL_GATEWAY](docs/MODEL_GATEWAY.md) | 请求传输、输出限制、结算与错误记录边界 |
+| [REQUEST_RECOVERY](docs/REQUEST_RECOVERY.md) | 流式完成条件、终结回执、可选重试与动作恢复 |
+| [BUDGET_SCOPES](docs/BUDGET_SCOPES.md) | 阶段分配、原子预留、未知用量与账本边界 |
+| [BUILD_PREFLIGHT](docs/BUILD_PREFLIGHT.md) | 镜像源码校验、依赖构建与诊断记录 |
 | [DEVELOPMENT](docs/DEVELOPMENT.md) | 依赖安装、离线测试和静态检查 |
 | [API_SETUP](docs/API_SETUP.md) | 模型服务配置与密钥设置 |
 | [REPRODUCE](docs/REPRODUCE.md) | 准备、推理、导出和分析流程 |
@@ -44,4 +48,4 @@ ctxroute 是面向软件工程 Agent 的实验框架，用于研究结构化上�
 | [A0_ADAPTER](docs/A0_ADAPTER.md) | 原生基线的接入方式与接口边界 |
 | [STRUCTURED_MEMORY](docs/STRUCTURED_MEMORY.md) | 记忆结构、证据引用与校验规则 |
 | [ACTION_PROTOCOL](docs/ACTION_PROTOCOL.md) | 动作格式、解析与纠错机制 |
-| [PROGRESS_CONTROL](docs/PROGRESS_CONTROL.md) | 进展反馈、重复动作检测与停止规则 |
+| [PROGRESS_CONTROL](docs/PROGRESS_CONTROL.md) | 进展反馈、公开验证、可选编辑策略与提交条件 |

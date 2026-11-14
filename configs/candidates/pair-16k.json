@@ -1,0 +1,17 @@
+{
+  "status": "candidate_only",
+  "execution_authorized": false,
+  "budget_config": "configs/budgets/stage-cny45.json",
+  "runtime_config": "configs/candidates/runtime-16k.json",
+  "runs": [
+    {
+      "budget_lane": "baseline",
+      "config": "configs/candidates/A1-baseline-16k.json"
+    },
+    {
+      "budget_lane": "checkpoint",
+      "config": "configs/candidates/A1-checkpoint-16k.json"
+    }
+  ],
+  "requires": "New frozen dev plan and explicit paid authorization; no historical plan is modified."
+}

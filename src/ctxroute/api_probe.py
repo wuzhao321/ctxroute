@@ -18,8 +18,8 @@ from zoneinfo import ZoneInfo
 
 from ctxroute.models.diagnostics import active_wire
 from ctxroute.secrets import load_key
-from ctxroute.tracing.budget import Ledger
 from ctxroute.tracing.cost import Price, Usage, money
+from ctxroute.tracing.stage_budget import StageLedger, load_budget, open_budget_ledger
 
 Json = dict[str, Any]
 Transport = Callable[[Json, str, int], Json]
@@ -156,7 +156,7 @@ def run_probe(
 
         transport = pydantic_transport
     settings: Json = json.loads((root / "configs/api_probe.json").read_text())
-    budget: Json = json.loads((root / "configs/budget.json").read_text())
+    budget = load_budget(root)
     price_path = root / settings["price_file"]
     prices: Json = json.loads(price_path.read_text())
     model: Json = prices["models"][settings["model_tier"]]
@@ -191,12 +191,7 @@ def run_probe(
         raise ProbeError("price_snapshot_needs_daily_verification")
     commit = source_commit(root)
     key = load_key(root)
-    book = Ledger(
-        root / "results/budget/campaign.sqlite",
-        hard_limit=money(str(budget["hard_limit"])),
-        pause_at=money(str(budget["pause_at"])),
-        enabled=True,
-    )
+    book = open_budget_ledger(root, budget)
     state = book.snapshot()
     print(
         f"预计预留 ${reservation} / 已核算 ${state.spent} / 未结算预留 ${state.reserved}"
@@ -228,7 +223,17 @@ def run_probe(
             output.write(encoded.replace(key, "[REDACTED]") + "\n")
             output.flush()
 
-    book.reserve(run_id, reservation, "model_api")
+    if isinstance(book, StageLedger):
+        book.bind_scope(run_id, "validation")
+        book.reserve(
+            run_id,
+            reservation,
+            "model_api",
+            scope=run_id,
+            scope_limit=book.policy.lane_cap("validation"),
+        )
+    else:
+        book.reserve(run_id, reservation, "model_api")
     log({"event": "reserved", "reservation_usd": str(reservation)})
     payload: Json = {
         "model": model["model_id"],

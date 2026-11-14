@@ -3,13 +3,12 @@
 import argparse
 import json
 import sys
-from decimal import Decimal
 from pathlib import Path
-from typing import Any
 
 from ctxroute.api_probe import ProbeError, run_probe
 from ctxroute.secrets import load_key
 from ctxroute.tracing.budget import BudgetStopped
+from ctxroute.tracing.stage_budget import budget_report, load_budget
 
 
 def main() -> None:
@@ -65,16 +64,10 @@ def main() -> None:
             ) from None
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
-    config: dict[str, Any] = json.loads(args.config.read_text())
+    config = load_budget(Path.cwd(), args.config)
     print(
         json.dumps(
-            {
-                "hard_limit_usd": str(Decimal(str(config["hard_limit"]))),
-                "pause_at_usd": str(Decimal(str(config["pause_at"]))),
-                "paid_execution_enabled": config["paid_execution_enabled"],
-                "status": "configuration_loaded",
-                "note": "Configuration only; not a statement of account balance or billed cost",
-            },
+            {"status": "configuration_loaded", **budget_report(Path.cwd(), config)},
             ensure_ascii=False,
             indent=2,
         )

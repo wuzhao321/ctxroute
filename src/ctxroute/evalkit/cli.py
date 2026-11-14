@@ -14,8 +14,7 @@ from ctxroute.runtime import build_live_engine
 from ctxroute.sandbox.base import Sandbox
 from ctxroute.sandbox.docker import DockerSandbox
 from ctxroute.tools.mcp_client import McpSandbox, StdioClient
-from ctxroute.tracing.budget import Ledger
-from ctxroute.tracing.cost import money
+from ctxroute.tracing.stage_budget import StageBudget, load_budget, open_budget_ledger
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -108,25 +107,25 @@ def main(argv: list[str] | None = None) -> None:
 
 def execute_campaign(root: Path, plan: Path, tasks: Path, images: Path, *, execute: bool) -> None:
     runtime = json.loads((root / "configs/runtime.json").read_text())
-    budget = json.loads((root / "configs/budget.json").read_text())
+    budget = load_budget(root)
     if (
         not execute
         or runtime["execution_mode"] != "live"
         or budget["paid_execution_enabled"] is not True
     ):
         raise RuntimeError("Execution disabled: this phase only implements experiment code")
-    load_plan(root, plan)
+    frozen = load_plan(root, plan)
+    policy = budget.get("stage_policy")
+    if isinstance(policy, StageBudget) and any(
+        job.get("budget_lane") not in policy.allocations() for job in frozen["jobs"]
+    ):
+        raise ValueError("Stage execution requires a new plan with explicit budget_lane per run")
     task_map = load_tasks(tasks)
     registry: dict[str, str] = json.loads(images.read_text())
     sandbox_cfg = json.loads((root / "configs/sandbox.json").read_text())
     if not set(task_map) <= set(registry):
         raise ValueError("Missing instance image digest")
-    ledger = Ledger(
-        root / "results/budget/campaign.sqlite",
-        hard_limit=money(str(budget["hard_limit"])),
-        pause_at=money(str(budget["pause_at"])),
-        enabled=True,
-    )
+    ledger = open_budget_ledger(root, budget)
     client = None
     sandbox: Sandbox
     if runtime.get("tool_transport", "mcp") == "mcp":

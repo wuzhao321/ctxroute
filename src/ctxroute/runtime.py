@@ -22,8 +22,12 @@ from ctxroute.orchestrator.engine import Engine, RunResult
 from ctxroute.sandbox.base import Sandbox
 from ctxroute.sandbox.fake import FakeSandbox
 from ctxroute.secrets import load_key
-from ctxroute.tracing.budget import Ledger
-from ctxroute.tracing.cost import money
+from ctxroute.tracing.stage_budget import (
+    StageBudget,
+    StageLedger,
+    load_budget,
+    open_budget_ledger,
+)
 from ctxroute.tracing.writer import RunWriter
 
 
@@ -71,13 +75,18 @@ def build_live_engine(
     metadata: dict[str, Any] | None = None,
 ) -> Runner:
     runtime: dict[str, Any] = json.loads((root / "configs/runtime.json").read_text())
-    budget: dict[str, Any] = json.loads((root / "configs/budget.json").read_text())
+    budget = load_budget(root)
     if runtime["execution_mode"] != "live" or budget["paid_execution_enabled"] is not True:
         raise RuntimeError("Live execution is disabled; current scope is code-only")
     cfg_path = config_path or root / f"configs/arms/{arm}.yaml"
     cfg = ArmConfig.load(cfg_path)
     if cfg.arm != arm or cfg.engine not in {"ctxroute", "mini-swe-agent"}:
         raise ValueError("Unsupported or mismatched experiment engine")
+    policy = budget.get("stage_policy")
+    lane = str((metadata or {}).get("budget_lane", ""))
+    if isinstance(policy, StageBudget):
+        if lane not in policy.allocations() or cfg.limits.budget > policy.lane_cap(lane):
+            raise ValueError("Stage runs require an explicit allocation and compatible task cap")
     native = load_native(root) if cfg.engine == "mini-swe-agent" else None
     sandbox_cfg = json.loads((root / "configs/sandbox.json").read_text())
     transport_name = "http" if native is not None else runtime.get("model_transport", "http")
@@ -114,6 +123,8 @@ def build_live_engine(
             "image_digest": image_digest,
             "engine": cfg.engine,
             "model_transport": transport_name,
+            "budget_stage_id": policy.stage_id if isinstance(policy, StageBudget) else None,
+            "budget_lane": lane,
             "source_tree_sha256": code_fingerprint(root),
             "controls": controlled_variables(
                 cfg,
@@ -141,12 +152,9 @@ def build_live_engine(
         "config", {**asdict(cfg), **({"native": native.config} if native is not None else {})}
     )
     writer.snapshot("task", asdict(task))
-    ledger = Ledger(
-        root / "results/budget/campaign.sqlite",
-        hard_limit=money(str(budget["hard_limit"])),
-        pause_at=money(str(budget["pause_at"])),
-        enabled=True,
-    )
+    ledger = open_budget_ledger(root, budget)
+    if isinstance(ledger, StageLedger):
+        ledger.bind_scope(run_id, lane)
     model = DeepSeekModel(
         key=key,
         prices=prices,
@@ -155,6 +163,7 @@ def build_live_engine(
         input_guard_tokens=runtime["input_guard_tokens"],
         thinking=runtime["thinking"],
         transport=transport,
+        stream=runtime.get("stream", False),
     )
     if native is not None:
         return MiniSweRunner(

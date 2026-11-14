@@ -30,13 +30,14 @@ ctxroute 使用 DeepSeek 模型接口，支持直接 HTTP 和 PydanticAI 两种�
 
 探针使用固定提示 `Reply exactly OK.`、`temperature=0`、关闭 thinking、非流式输出，最多生成 32 token；每次命令只发送一次请求，不自动重试。配置位于 [`configs/api_probe.json`](../configs/api_probe.json)。探针检查连接、响应与 usage 字段，不产生基准任务结果。
 
-执行前需启用 `configs/budget.json` 的 `paid_execution_enabled`，并核验探针所引用价格快照的日期。请求前检查本地提交与预算，先预留配置额度，再派发请求。预留额度与最终 usage 成本分别记录。
+执行前需启用 `configs/budget.json` 的 `paid_execution_enabled`；选择活动阶段时，其配置中的同名开关也必须开启。核验探针所引用价格快照的日期，请求前检查本地提交与预算，先预留配置额度，再派发请求。预留额度与最终 usage 成本分别记录。
 
 ## 记录与计费
 
 - 请求目标固定为 `https://api.deepseek.com/chat/completions`，开启证书校验，禁用重定向和环境代理。
 - `results/runs/api-probe-*/` 保存 manifest 与 trace，包括 usage、缓存命中、耗时、配置和价格哈希；不记录认证头、密钥或响应正文。
-- 所有运行共享 `results/budget/campaign.sqlite`。超时或缺失 usage 的请求保留未结算预留，不能按零费用处理，也不能通过更换账本重置累计费用。
+- 未选择阶段时使用 `results/budget/campaign.sqlite`；显式设置 `active_stage_config` 时使用阶段配置的账本，探针归入 `validation` 分配。阶段身份和限额不可借新运行 ID 重置，详见 [BUDGET_SCOPES](BUDGET_SCOPES.md)。
+- 超时或缺失 usage 的请求保留未结算预留，不能按零费用处理；历史账本和未知预留必须保留。
 - 输入护栏与最大输出限制用于请求前的保守费用预留；输入估算不是供应商 tokenizer 上界。
 - 连通探针与任务模型网关具有不同的结算路径。任务网关在有效 usage 返回后，确定非高峰时按非高峰价结算，其余时段按高峰价保守结算。缺少 usage 的请求保留预留。API usage 估算仍需与供应商账单核对，详见 [MODEL_GATEWAY](MODEL_GATEWAY.md)。
 

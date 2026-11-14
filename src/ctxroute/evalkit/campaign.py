@@ -15,6 +15,7 @@ from ctxroute.evalkit.split import agent_input
 from ctxroute.orchestrator.base import Runner
 from ctxroute.tracing.budget import BudgetStopped, Ledger
 from ctxroute.tracing.cost import money
+from ctxroute.tracing.stage_budget import StageLedger, budget_report, load_budget
 
 
 def digest(path: Path) -> str:
@@ -53,6 +54,9 @@ def create_plan(
     ):
         frozen[filename] = digest(root / filename)
     runtime = json.loads((root / "configs/runtime.json").read_text())
+    stage_config = load_budget(root).get("active_stage_config")
+    if stage_config:
+        frozen[stage_config] = digest(root / stage_config)
     frozen[runtime["price_file"]] = digest(root / runtime["price_file"])
     if "A0" in arms:
         relative = "configs/baselines/mini-swe-agent.json"
@@ -164,6 +168,8 @@ def run_plan(
     completed: list[dict[str, Any]] = []
     with campaign_lock(root):
         before = ledger.snapshot()
+        if isinstance(ledger, StageLedger):
+            print(json.dumps(budget_report(root, load_budget(root)), indent=2))
         print(
             json.dumps(
                 {

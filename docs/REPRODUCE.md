@@ -15,6 +15,8 @@
 
 当前计划器仅接受 `data/split.json` 中 dev 前 1–5 项、固定 seed 和 A0–A5；A2/A4 可选择 `--truncate` 生成消融计划。它不提供正式 test 或多 seed 调度。
 
+**阶段模式边界**：`experiment plan` 当前不会生成逐运行的 `budget_lane`。当 `configs/budget.json` 选择活动阶段时，上述命令可准备计划，但付费入口会拒绝缺少分配的计划。阶段执行需要在新计划生成时显式绑定 `baseline`、`checkpoint` 或 `validation` 并纳入计划身份及冻结校验；不能事后修改已冻结计划。预算模式与分配规则见 [BUDGET_SCOPES](BUDGET_SCOPES.md)。
+
 ## 2. 准备输入与镜像
 
 任务 JSONL 每行只能包含：
@@ -25,7 +27,7 @@
 
 实际实例必须与计划完全匹配，不得包含 gold patch、测试补丁或判分字段。镜像映射格式由 [`evalkit/cli.py`](../src/ctxroute/evalkit/cli.py) 的注册表读取逻辑定义，镜像需固定摘要，并满足 [`sandbox/docker.py`](../src/ctxroute/sandbox/docker.py) 的隔离约束。
 
-工具镜像与判分环境分离；构建镜像、安装依赖或下载数据由独立准备流程完成，执行入口不会自动创建云资源。
+工具镜像与判分环境分离；构建镜像、安装依赖或下载数据由独立准备流程完成，执行入口不会自动创建云资源。源码身份和构建失败记录要求见 [BUILD_PREFLIGHT](BUILD_PREFLIGHT.md)。
 
 ## 3. 显式执行推理
 
@@ -33,7 +35,7 @@
 .venv/bin/ctxroute experiment reproduce infer --workflow results/workflows/dev-pilot --tasks data/private/tasks.jsonl --images configs/private/images.json --execute
 ```
 
-需要 runtime 的 `execution_mode=live`、启用预算、有效价格快照和可用沙箱。请求派发前预留最坏费用，开始同一实例时检查其剩余各臂的完整额度。
+需要 runtime 的 `execution_mode=live`、启用所选预算模式的执行开关、有效价格快照和可用沙箱。阶段模式还要求逐运行的有效 `budget_lane`。请求派发前预留最坏费用，开始同一实例时检查其剩余各臂的完整额度。
 
 恢复以任务为单位：完成任务跳过；中断任务保留证据与未结算预留，禁止自动重跑。失败、空补丁、预算终止均保留，不据结果替换实例。
 

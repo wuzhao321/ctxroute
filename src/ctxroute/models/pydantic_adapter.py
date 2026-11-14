@@ -5,8 +5,9 @@ from collections.abc import AsyncIterator
 from importlib import import_module
 from typing import Any
 
+from ctxroute.models.deadline import wall_timeout
 from ctxroute.models.diagnostics import WireMetadata, active_wire
-from ctxroute.models.streaming import IncompleteStreamError, StreamTracker
+from ctxroute.models.streaming import IncompleteStreamError, StreamProtocolError, StreamTracker
 
 
 def pydantic_transport(payload: dict[str, Any], key: str, timeout: int) -> dict[str, Any]:
@@ -31,7 +32,7 @@ def pydantic_transport(payload: dict[str, Any], key: str, timeout: int) -> dict[
         if type(streaming) is not bool:
             raise ValueError("Invalid stream option")
         wire.streaming = streaming
-        tracker = StreamTracker()
+        tracker = StreamTracker(output_audit=wire.output_audit)
         if streaming:
             wire.stream_terminal = tracker.terminal_fields()
 
@@ -65,7 +66,7 @@ def pydantic_transport(payload: dict[str, Any], key: str, timeout: int) -> dict[
 
             async def measured_bytes(chunk_size: int | None = None) -> AsyncIterator[bytes]:
                 # Observe decoded bytes, so gzip and split UTF-8/SSE frames also work.
-                # Never save the response text or reasoning stream in diagnostics.
+                # Text evidence is bounded and saved separately by the gateway.
                 async for chunk in original_bytes(chunk_size):
                     observe(chunk)
                     yield chunk
@@ -86,6 +87,40 @@ def pydantic_transport(payload: dict[str, Any], key: str, timeout: int) -> dict[
         )
         try:
             messages = payload["messages"]
+            if len(messages) > 2 and "response_format" not in payload:
+                # Native mini-swe-agent owns its chat history. Pass it unchanged
+                # through the installed SDK instead of forcing a two-message envelope.
+                if any(
+                    item.get("role") not in {"system", "user", "assistant"}
+                    or not isinstance(item.get("content"), str)
+                    for item in messages
+                ):
+                    raise ValueError("Invalid native text history")
+                async with wall_timeout(timeout):
+                    native_response = await client.chat.completions.create(
+                        model=payload["model"],
+                        messages=messages,
+                        max_tokens=payload["max_tokens"],
+                        temperature=payload["temperature"],
+                        stream=streaming,
+                        extra_body=extra_body,
+                    )
+                    if not streaming:
+                        wire.sdk_output_accepted = True
+                        return native_response.model_dump()
+                    fragments: list[str] = []
+                    async for chunk in native_response:
+                        for choice in chunk.choices:
+                            if choice.delta.content:
+                                fragments.append(choice.delta.content)
+                wire.sdk_output_accepted = True
+                finish_reason, receipt_usage = tracker.validated_receipt()
+                return {
+                    "choices": [
+                        {"finish_reason": finish_reason, "message": {"content": "".join(fragments)}}
+                    ],
+                    "usage": receipt_usage,
+                }
             if len(messages) == 1 and messages[0]["role"] == "user":
                 system_prompt, user_prompt = (), messages[0]["content"]
             elif (
@@ -110,8 +145,10 @@ def pydantic_transport(payload: dict[str, Any], key: str, timeout: int) -> dict[
                 "max_retries": 0,
                 "extra_body": extra_body,
             }
+            finish_reason: str | None = None
+            receipt_usage: dict[str, int] | None = None
             # A server sending keep-alives must not extend the run deadline forever.
-            async with asyncio.timeout(timeout):
+            async with wall_timeout(timeout):
                 if streaming:
                     try:
                         async with agent.run_stream(
@@ -121,15 +158,18 @@ def pydantic_transport(payload: dict[str, Any], key: str, timeout: int) -> dict[
                         ) as result:
                             output = await result.get_output()
                             usage, response = result.usage, result.response
+                            wire.sdk_output_accepted = True
                     except Exception as exc:
+                        wire.sdk_output_accepted = False
                         if wire.http_status == 200 and wire.response_completed and not tracker.done:
                             # SDKs may report "no output" after a clean but incomplete EOF.
                             raise IncompleteStreamError(
                                 "Stream ended without completion marker"
                             ) from exc
                         raise
-                    if not tracker.done:
-                        raise IncompleteStreamError("Stream ended without completion marker")
+                    finish_reason, receipt_usage = tracker.validated_receipt()
+                    if finish_reason == "stop" and response.finish_reason != "stop":
+                        raise StreamProtocolError("Invalid stream terminal metadata")
                 else:
                     result = await agent.run(
                         user_prompt,
@@ -137,26 +177,30 @@ def pydantic_transport(payload: dict[str, Any], key: str, timeout: int) -> dict[
                         model_settings=settings,
                     )
                     output, usage, response = result.output, result.usage, result.response
+                    wire.sdk_output_accepted = True
             if getattr(usage, "unmeasured_requests", 1) != 0 or usage.requests != 1:
                 raise ValueError("Missing usage or hidden additional SDK requests")
             cached = usage.details.get("prompt_cache_hit_tokens")
             missed = usage.details.get("prompt_cache_miss_tokens")
             if type(cached) is not int or type(missed) is not int:
                 raise ValueError("Missing original DeepSeek cache usage fields")
+            sdk_usage = {
+                "prompt_tokens": usage.input_tokens,
+                "completion_tokens": usage.output_tokens,
+                "prompt_cache_hit_tokens": cached,
+                "prompt_cache_miss_tokens": missed,
+                "total_tokens": usage.input_tokens + usage.output_tokens,
+            }
+            if streaming and sdk_usage != receipt_usage:
+                raise ValueError("SDK usage differs from stream receipt")
             return {
                 "choices": [
                     {
-                        "finish_reason": response.finish_reason,
+                        "finish_reason": finish_reason if streaming else response.finish_reason,
                         "message": {"content": output},
                     }
                 ],
-                "usage": {
-                    "prompt_tokens": usage.input_tokens,
-                    "completion_tokens": usage.output_tokens,
-                    "prompt_cache_hit_tokens": cached,
-                    "prompt_cache_miss_tokens": missed,
-                    "total_tokens": usage.input_tokens + usage.output_tokens,
-                },
+                "usage": receipt_usage if streaming else sdk_usage,
             }
         finally:
             await client.close()

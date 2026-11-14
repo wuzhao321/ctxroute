@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from typing import Any, cast
 from urllib.error import HTTPError, URLError
 
+from ctxroute.models.output_audit import OutputAudit
+
 _TIMEOUT_STAGES = {
     "ConnectTimeout": "connect",
     "ReadTimeout": "read",
@@ -20,6 +22,7 @@ _USAGE_ERRORS = {
     "inconsistent_cache_usage",
     "Missing usage or hidden additional SDK requests",
     "Missing original DeepSeek cache usage fields",
+    "SDK usage differs from stream receipt",
 }
 _SAFE_MESSAGES = _USAGE_ERRORS | {
     "Connection error.",
@@ -32,6 +35,7 @@ _SAFE_MESSAGES = _USAGE_ERRORS | {
     "Stream ended without completion marker",
     "SSE event exceeded byte limit",
     "Response exceeded byte limit",
+    "Invalid stream terminal metadata",
 }
 _BODY_VALUES = {
     "rate_limit_exceeded",
@@ -60,13 +64,22 @@ def _safe_message(exc: BaseException) -> str | None:
 
 def _error_chain(error: BaseException) -> list[BaseException]:
     chain: list[BaseException] = []
-    current: BaseException | None = error
-    while current is not None and current not in chain:
+    pending = [error]
+    # Task groups can wrap the actual network/SDK exception in leaves rather
+    # than __cause__. Bound traversal and retain only types/allowlisted messages.
+    while pending and len(chain) < 32:
+        current = pending.pop()
+        if any(current is item for item in chain):
+            continue
         chain.append(current)
+        if isinstance(current, BaseExceptionGroup):
+            pending.extend(reversed(cast(BaseExceptionGroup[BaseException], current).exceptions))
         if isinstance(current, URLError) and isinstance(current.reason, BaseException):
-            current = current.reason
+            pending.append(current.reason)
         else:
-            current = current.__cause__ or current.__context__
+            cause = current.__cause__ or current.__context__
+            if cause is not None:
+                pending.append(cause)
     return chain
 
 
@@ -104,6 +117,8 @@ class WireMetadata:
     sse_keepalives: int = 0
     sse_done: bool = False
     stream_terminal: dict[str, Any] | None = None
+    sdk_output_accepted: bool | None = None
+    output_audit: OutputAudit = field(default_factory=OutputAudit, repr=False)
     _started: float = field(default_factory=time.monotonic, repr=False)
 
     def observe_response(self, status: int, headers: Any) -> None:
@@ -138,6 +153,7 @@ class WireMetadata:
             "sse_keepalives": self.sse_keepalives,
             "sse_done": self.sse_done,
             "stream_terminal": self.stream_terminal,
+            "sdk_output_accepted": self.sdk_output_accepted,
         }
 
     @staticmethod
@@ -168,6 +184,7 @@ class WireMetadata:
                 "exception_message": None,
                 "root_exception_type": None,
                 "root_exception_message": None,
+                "exception_chain_types": [type(exc).__name__],
                 "http_status": self.http_status,
                 "response_body_redacted": None,
                 "provider_request_id": None,
@@ -198,10 +215,11 @@ class WireMetadata:
             kind = "timeout"
         elif status is not None and status >= 400:
             kind = "rate_limit" if status == 429 else "http_error"
-        elif any(_safe_message(e) in _USAGE_ERRORS for e in chain):
-            kind = "invalid_usage"
         elif {
             "ConnectError",
+            "ReadError",
+            "WriteError",
+            "CloseError",
             "APIConnectionError",
             "ConnectionRefusedError",
             "RemoteProtocolError",
@@ -209,6 +227,14 @@ class WireMetadata:
             kind = "connection_error"
         elif "IncompleteStreamError" in names:
             kind = "incomplete_stream"
+        elif "StreamProtocolError" in names:
+            kind = "invalid_stream"
+        elif terminal_kind := self._terminal_failure_kind():
+            kind = terminal_kind
+        elif any(_safe_message(e) in _USAGE_ERRORS for e in chain):
+            kind = "invalid_usage"
+        elif "UnexpectedModelBehavior" in names:
+            kind = "sdk_output_rejected"
         elif isinstance(exc, (ValueError, KeyError)) or status is not None:
             kind = "validation_error" if status is None else "response_processing"
         return {
@@ -218,6 +244,7 @@ class WireMetadata:
             "exception_message": _safe_message(exc),
             "root_exception_type": names[-1],
             "root_exception_message": _safe_message(root),
+            "exception_chain_types": names,
             "http_status": status,
             "response_body_redacted": _safe_body(chain)
             if status is not None and status >= 400
@@ -227,6 +254,25 @@ class WireMetadata:
             "is_timeout": timed_out if kind != "unknown" else None,
             "timeout_stage": stage,
         }
+
+    def _terminal_failure_kind(self) -> str | None:
+        # DONE establishes a protocol boundary, not successful generation. Never
+        # infer a reason from event counts, HTTP status, or an SDK default stop.
+        receipt = self.stream_terminal
+        if not self.streaming or not self.sse_done or receipt is None:
+            return None
+        reason = receipt.get("finish_reason")
+        if receipt.get("metadata_invalid") or reason in (None, "other", "conflicting"):
+            return "invalid_stream"
+        if reason == "length":
+            return "output_exhausted"
+        if reason != "stop":
+            return "model_terminated"
+        if not receipt.get("content_present"):
+            return "empty_answer"
+        if receipt.get("usage_status") != "valid":
+            return "invalid_usage"
+        return None
 
 
 # Carries wire observations through optional transports and into later usage validation.

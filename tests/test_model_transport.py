@@ -6,6 +6,7 @@ import json
 import socket
 import urllib.request
 from collections.abc import Callable
+from dataclasses import replace
 from decimal import Decimal
 from email.message import Message
 from pathlib import Path
@@ -25,6 +26,7 @@ from ctxroute.models.streaming import StreamTracker
 from ctxroute.orchestrator.engine import Engine
 from ctxroute.sandbox.fake import FakeSandbox
 from ctxroute.tracing.budget import Ledger
+from ctxroute.tracing.stage_budget import StageBudget, StageLedger
 from ctxroute.tracing.writer import RunWriter
 
 
@@ -47,9 +49,11 @@ def offline_http(monkeypatch: pytest.MonkeyPatch, handle: Callable[[Any], Any]) 
     monkeypatch.setattr(socket.socket, "connect_ex", no_network)
 
 
-@pytest.mark.parametrize("thinking", ["disabled", "enabled"])
+@pytest.mark.parametrize(
+    "thinking,max_output", [("disabled", 32), ("enabled", 32), ("enabled", 16384)]
+)
 def test_sdk_preserves_output_mode_raw_text_usage_and_single_request(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, thinking: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, thinking: str, max_output: int
 ) -> None:
     httpx = pytest.importorskip("httpx")
     pytest.importorskip("pydantic_ai")
@@ -111,7 +115,7 @@ def test_sdk_preserves_output_mode_raw_text_usage_and_single_request(
                 ),
                 "strong",
                 "action",
-                32,
+                max_output,
                 10,
                 "sdk-fixture",
                 i + 1,
@@ -124,7 +128,7 @@ def test_sdk_preserves_output_mode_raw_text_usage_and_single_request(
         assert result.usage.input_tokens == 20 and result.usage.cached_tokens == 5
         assert result.usage.output_tokens == 8
         assert captured[i]["thinking"] == {"type": thinking}
-        assert captured[i]["max_tokens"] == 32
+        assert captured[i]["max_tokens"] == max_output
         assert "max_completion_tokens" not in captured[i]
     assert captured[0]["response_format"] == {"type": "json_object"}
     assert "response_format" not in captured[1]
@@ -381,8 +385,59 @@ def sse_body(
     )
 
 
+def test_native_history_stream_preserves_messages_and_limits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    httpx = pytest.importorskip("httpx")
+    messages = [
+        {"role": "system", "content": "native system"},
+        {"role": "user", "content": "public task"},
+        {"role": "assistant", "content": "```mswea_bash_command\nls\n```"},
+        {"role": "user", "content": "<returncode>0</returncode><output>file.py</output>"},
+    ]
+    action = "```mswea_bash_command\ncat file.py\n```"
+    calls: list[dict[str, Any]] = []
+
+    def handle(request: Any) -> Any:
+        payload = json.loads(request.content)
+        calls.append(payload)
+        assert payload["messages"] == messages
+        assert payload["max_tokens"] == 24576
+        assert payload["thinking"] == {"type": "enabled"}
+        assert payload["stream"] is True and "response_format" not in payload
+        return httpx.Response(
+            200, headers={"content-type": "text/event-stream"}, content=sse_body(action)
+        )
+
+    offline_http(monkeypatch, handle)
+    result = pydantic_transport(
+        {
+            "model": "deepseek-v4-pro",
+            "messages": messages,
+            "max_tokens": 24576,
+            "thinking": {"type": "enabled"},
+            "temperature": 0,
+            "stream": True,
+        },
+        "offline-native-key",
+        10,
+    )
+    assert len(calls) == 1
+    assert result["choices"][0] == {"finish_reason": "stop", "message": {"content": action}}
+    assert result["usage"]["prompt_cache_hit_tokens"] == 5
+
+
 @pytest.mark.parametrize(
-    "case", ["complete", "gzip", "disconnect", "missing_done", "missing_usage", "empty_stream"]
+    "case",
+    [
+        "complete",
+        "candidate",
+        "gzip",
+        "disconnect",
+        "missing_done",
+        "missing_usage",
+        "empty_stream",
+    ],
 )
 def test_stream_requires_completion_and_usage_and_preserves_partial_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: str
@@ -415,6 +470,15 @@ def test_stream_requires_completion_and_usage_and_preserves_partial_failure(
     ledger = Ledger(
         tmp_path / "budget.sqlite", hard_limit=Decimal(10), pause_at=Decimal(8), enabled=True
     )
+    if case == "candidate":
+        policy = replace(
+            StageBudget.load(
+                Path(__file__).resolve().parents[1] / "configs/budgets/stage-cny45.json"
+            ),
+            paid_execution_enabled=True,
+        )
+        ledger = StageLedger(tmp_path / "stage.sqlite", policy, enabled=True)
+        ledger.bind_scope("stream-test", "baseline")
     model = DeepSeekModel(
         key="fake-stream-key",
         prices=json.loads(
@@ -431,14 +495,14 @@ def test_stream_requires_completion_and_usage_and_preserves_partial_failure(
         ({"role": "user", "content": "Synthetic JSON action"},),
         "strong",
         "action",
-        32,
-        10,
+        16384 if case == "candidate" else 32,
+        900 if case == "candidate" else 10,
         "stream-test",
         1,
-        Decimal("0.20"),
+        Decimal("2.50") if case == "candidate" else Decimal("0.20"),
         response_format="json_object",
     )
-    if case in ("complete", "gzip"):
+    if case in ("complete", "candidate", "gzip"):
         assert model.complete(request).text == action
         assert ledger.snapshot().spent > 0 and ledger.snapshot().reserved == 0
     else:
@@ -451,12 +515,15 @@ def test_stream_requires_completion_and_usage_and_preserves_partial_failure(
     last = events[-1]
     assert len(captured) == 1 and captured[0]["stream"] is True
     assert captured[0]["stream_options"] == {"include_usage": True}
-    assert captured[0]["max_tokens"] == 32 and captured[0]["thinking"] == {"type": "enabled"}
+    assert captured[0]["max_tokens"] == request.max_output_tokens
+    assert captured[0]["thinking"] == {"type": "enabled"}
+    if case == "candidate":
+        assert events[0]["reserved_usd"] == "0.30176256"
     assert last["http_status"] == 200 and last["provider_request_id"] == "req-stream-test"
     assert last["streaming"] is True and last["response_bytes_received"] > 0
     assert last["response_chunks_received"] > 0 and last["first_byte_after_ms"] is not None
     assert last["sse_keepalives"] == 1
-    assert last["sse_done"] is (case in ("complete", "gzip", "missing_usage"))
+    assert last["sse_done"] is (case in ("complete", "candidate", "gzip", "missing_usage"))
     for secret in ("fake-stream-key", "private-reasoning-fixture", "Synthetic JSON action"):
         assert secret not in raw
 
@@ -611,7 +678,10 @@ def test_thinking_only_sdk_failure_keeps_terminal_receipt_and_reservation(
     raw = (writer.path / "requests.jsonl").read_text()
     reserved, failed = map(json.loads, raw.splitlines())
     assert failed["exception_type"] == "UnexpectedModelBehavior"
-    assert failed["failure_kind"] == "response_processing"
+    assert failed["failure_kind"] == (
+        "output_exhausted" if finish_reason == "length" else "empty_answer"
+    )
+    assert failed["sdk_output_accepted"] is False
     assert failed["http_status"] == 200 and failed["provider_request_id"] == "req-thinking-only"
     assert failed["sse_done"] is True
     assert failed["stream_terminal"] == {
@@ -624,6 +694,9 @@ def test_thinking_only_sdk_failure_keeps_terminal_receipt_and_reservation(
             "prompt_cache_miss_tokens": 15,
         },
         "usage_status": "valid",
+        "reasoning_tokens": None,
+        "reasoning_tokens_status": "not_seen",
+        "receipt_status": "valid",
         "content_present": False,
         "reasoning_present": True,
         "metadata_invalid": False,

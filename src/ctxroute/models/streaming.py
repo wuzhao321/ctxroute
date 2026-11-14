@@ -1,12 +1,21 @@
 """Bounded SSE completion tracking without storing model text in diagnostics."""
 
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Any, cast
 
 from ctxroute.api_probe import ProbeError, normalize_usage
+from ctxroute.models.output_audit import OutputAudit
 
-_FINISH_REASONS = {"stop", "length", "content_filter", "tool_calls", "insufficient_system_resource"}
+_FINISH_REASONS = {
+    "stop",
+    "length",
+    "content_filter",
+    "tool_calls",
+    "insufficient_system_resource",
+    "aborted",
+}
 _USAGE_FIELDS = (
     "prompt_tokens",
     "completion_tokens",
@@ -18,6 +27,10 @@ _USAGE_FIELDS = (
 
 class IncompleteStreamError(RuntimeError):
     """The stream ended without the protocol completion marker."""
+
+
+class StreamProtocolError(RuntimeError):
+    """The original stream cannot establish a valid terminal response."""
 
 
 @dataclass
@@ -32,9 +45,13 @@ class StreamTracker:
     _finish_reason: str | None = None
     _usage: dict[str, int] | None = None
     _usage_status: str = "not_seen"
+    _reasoning_tokens: int | None = None
+    _reasoning_tokens_status: str = "not_seen"
     _content_present: bool = False
     _reasoning_present: bool = False
     _metadata_invalid: bool = False
+    _skip_lf: bool = False
+    output_audit: OutputAudit = field(default_factory=OutputAudit, repr=False)
 
     def terminal_fields(self) -> dict[str, Any]:
         """Only enum values, validated counts and booleans; never response text.
@@ -47,10 +64,42 @@ class StreamTracker:
             "finish_reason": self._finish_reason,
             "usage": dict(self._usage) if self._usage is not None else None,
             "usage_status": self._usage_status,
+            "reasoning_tokens": self._reasoning_tokens,
+            "reasoning_tokens_status": self._reasoning_tokens_status,
+            "receipt_status": self._receipt_status(),
             "content_present": self._content_present,
             "reasoning_present": self._reasoning_present,
             "metadata_invalid": self._metadata_invalid,
         }
+
+    def validated_receipt(self) -> tuple[str, dict[str, int]]:
+        """Require wire evidence before trusting SDK defaults or normalized counts.
+
+        Non-stop reasons remain intact for the gateway's rejection and accounting.
+        This receipt alone never authorizes an action or settles an SDK failure.
+        """
+        status = self._receipt_status()
+        if status == "incomplete":
+            raise IncompleteStreamError("Stream ended without completion marker")
+        if status == "invalid_terminal":
+            raise StreamProtocolError("Invalid stream terminal metadata")
+        if status == "invalid_usage":
+            raise ValueError(
+                "invalid_usage" if self._usage_status != "not_seen" else "missing_usage"
+            )
+        assert self._finish_reason is not None and self._usage is not None
+        return self._finish_reason, dict(self._usage)
+
+    def _receipt_status(self) -> str:
+        # This describes original terminal metadata and the five billing counts,
+        # independently of generation success, SDK acceptance and optional detail.
+        if not self.done:
+            return "incomplete"
+        if self._metadata_invalid or self._finish_reason not in _FINISH_REASONS:
+            return "invalid_terminal"
+        if self._usage_status != "valid" or self._usage is None:
+            return "invalid_usage"
+        return "valid"
 
     def _observe_event(self, data: bytes) -> None:
         if data.strip() == b"[DONE]":
@@ -65,10 +114,14 @@ class StreamTracker:
             self._metadata_invalid = True
             return
         record = cast(dict[str, Any], value)
+        if "choices" not in record and record.get("usage") is None:
+            self._metadata_invalid = True
         choices = record.get("choices", [])
         if not isinstance(choices, list):
             self._metadata_invalid = True
         else:
+            if len(cast(list[object], choices)) > 1:
+                self._metadata_invalid = True
             for item in cast(list[object], choices):
                 if not isinstance(item, dict):
                     self._metadata_invalid = True
@@ -91,8 +144,16 @@ class StreamTracker:
                     fields = cast(dict[str, object], delta)
                     content = fields.get("content")
                     reasoning = fields.get("reasoning_content")
+                    if any(v is not None and not isinstance(v, str) for v in (content, reasoning)):
+                        self._metadata_invalid = True
                     self._content_present |= isinstance(content, str) and bool(content)
                     self._reasoning_present |= isinstance(reasoning, str) and bool(reasoning)
+                    if isinstance(content, str):
+                        self.output_audit.content.add(content)
+                    if isinstance(reasoning, str):
+                        self.output_audit.reasoning.add(reasoning)
+                else:
+                    self._metadata_invalid = True
         if record.get("usage") is not None:
             self._observe_usage(record["usage"])
 
@@ -105,19 +166,55 @@ class StreamTracker:
             counts = {name: value[name] for name in _USAGE_FIELDS}
         except (ProbeError, TypeError, ValueError):
             self._usage, self._usage_status = None, "invalid"
+            self._reasoning_tokens, self._reasoning_tokens_status = None, "invalid"
             return
         if self._usage_status in {"invalid", "conflicting"}:
             return
         if self._usage is not None and counts != self._usage:
             self._usage, self._usage_status = None, "conflicting"
+            self._reasoning_tokens, self._reasoning_tokens_status = None, "invalid"
         else:
             self._usage, self._usage_status = counts, "valid"
+            self._observe_reasoning_usage(value, counts["completion_tokens"])
+
+    def _observe_reasoning_usage(self, value: dict[str, Any], completion_tokens: int) -> None:
+        # Optional breakdown, already included in completion_tokens. It never
+        # changes pricing, SDK acceptance, or the required billing receipt.
+        if self._reasoning_tokens_status in {"invalid", "conflicting"}:
+            return
+        details = value.get("completion_tokens_details")
+        if details is None:
+            return
+        if not isinstance(details, dict):
+            self._reasoning_tokens, self._reasoning_tokens_status = None, "invalid"
+            return
+        tokens = cast(dict[str, object], details).get("reasoning_tokens")
+        if tokens is None:
+            return
+        if type(tokens) is not int or not 0 <= tokens <= completion_tokens:
+            self._reasoning_tokens, self._reasoning_tokens_status = None, "invalid"
+        elif self._reasoning_tokens is not None and self._reasoning_tokens != tokens:
+            self._reasoning_tokens, self._reasoning_tokens_status = None, "conflicting"
+        else:
+            self._reasoning_tokens, self._reasoning_tokens_status = tokens, "valid"
 
     def feed(self, chunk: bytes) -> None:
+        # OpenAI stops parsing at the first DONE. Later bytes must not alter the
+        # receipt depending on how HTTPX happens to split the transport chunks.
+        if self.done:
+            return
+        if self._skip_lf and chunk:
+            chunk = chunk.removeprefix(b"\n")
+            self._skip_lf = False
         self._buffer += chunk
-        while b"\n" in self._buffer:
-            line, self._buffer = self._buffer.split(b"\n", 1)
-            line = line.removesuffix(b"\r")
+        # SSE permits LF, CRLF and bare CR, including a CRLF split across chunks.
+        while match := re.search(rb"[\r\n]", self._buffer):
+            line = self._buffer[: match.start()]
+            delimiter = self._buffer[match.start() : match.end()]
+            self._buffer = self._buffer[match.end() :]
+            if delimiter == b"\r":
+                self._skip_lf = not self._buffer
+                self._buffer = self._buffer.removeprefix(b"\n")
             self._event_bytes += len(line)
             if self._event_bytes > self.max_event_bytes:
                 raise ValueError("SSE event exceeded byte limit")
@@ -127,6 +224,9 @@ class StreamTracker:
                     self._observe_event(b"\n".join(self._data))
                 self._data.clear()
                 self._event_bytes = 0
+                if self.done:
+                    self._buffer = b""
+                    return
             elif line.startswith(b":"):
                 self.keepalives += 1
             elif line == b"data" or line.startswith(b"data:"):

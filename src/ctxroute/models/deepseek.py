@@ -1,5 +1,7 @@
 """Budgeted production boundary, never invoked by the offline test/demo entrypoints."""
 
+import hashlib
+import json
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -16,7 +18,6 @@ from ctxroute.domain import ModelRequest, ModelResponse
 from ctxroute.models.base import ModelFailure
 from ctxroute.models.diagnostics import WireMetadata, active_wire
 from ctxroute.tracing.budget import Ledger
-from ctxroute.tracing.cost import Usage
 from ctxroute.tracing.writer import RunWriter
 
 
@@ -46,7 +47,7 @@ class DeepSeekModel:
             raise ModelFailure("No model time allowance remains")
         model = self.prices["models"][request.tier]
         peak = price_from(model["peak"])
-        bound = peak.cost(Usage(self.input_guard, 0, request.max_output_tokens))
+        bound = self.ledger.reservation_bound(request, peak, self.input_guard)
         request_id = uuid4().hex
         self.ledger.reserve(
             request_id,
@@ -159,4 +160,29 @@ class DeepSeekModel:
                 ),
             ) from None
         finally:
-            active_wire.reset(token)
+            try:
+                # Preserve partial/length outputs even when no ModelResponse is delivered.
+                # Diagnostic evidence cannot bypass the finish/usage/schema gates.
+                folder = self.writer.path / "response_audits"
+                folder.mkdir(exist_ok=True)
+                data = json.dumps(wire.output_audit.record(self.key), ensure_ascii=False).encode()
+                used = sum(p.stat().st_size for p in folder.glob("*.json"))
+                saved = used + len(data) <= 8_388_608
+                if saved:
+                    target = folder / (request_id + ".json")
+                    with target.open("xb") as output:
+                        output.write(data)
+                    target.chmod(0o600)
+                self.writer.append(
+                    "lifecycle",
+                    {
+                        "event": "response_audit",
+                        "step": request.step,
+                        "request_id": request_id,
+                        "saved": saved,
+                        "sha256": hashlib.sha256(data).hexdigest() if saved else None,
+                        "capture_limit_bytes_per_run": 8_388_608,
+                    },
+                )
+            finally:
+                active_wire.reset(token)

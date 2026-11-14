@@ -1,3 +1,4 @@
+import json
 from dataclasses import replace
 from pathlib import Path
 
@@ -33,6 +34,9 @@ def test_batch_compression_preserves_protected_parts_recent_steps_and_references
 
     def compress(text: str) -> Memory:
         calls.append(text)
+        for step in json.loads(text)["steps"]:
+            action = Action.parse(json.dumps(step["action"]), recall_enabled=True)
+            assert action.kind == "bash" and action.command == "cat file"
         return Memory(
             files_read=[
                 {

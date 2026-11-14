@@ -1,0 +1,21 @@
+{
+  "stage_id": "stage-cny45-20261107",
+  "currency": "CNY",
+  "billing_currency": "USD",
+  "usd_to_cny": "7",
+  "hard_cny": "45",
+  "pause_cny": "40",
+  "baseline_cny": "17.5",
+  "checkpoint_cny": "17.5",
+  "paired_cny": "35",
+  "validation_cny": "10",
+  "request_cny": "5",
+  "ledger": "results/budget/stage-cny45-20261107.sqlite",
+  "paid_execution_enabled": false,
+  "reservation": {
+    "input_floor": 32000,
+    "input_byte_multiplier": 2,
+    "input_margin": 8192,
+    "output_floor": 65536
+  }
+}

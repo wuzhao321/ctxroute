@@ -1,0 +1,42 @@
+{
+  "arm": "A1",
+  "engine": "ctxroute",
+  "context": {
+    "budget_tokens": 32000,
+    "recent_steps": 6,
+    "soft_ratio": 0.7,
+    "hard_ratio": 0.9,
+    "mode": "none",
+    "fixed_max_facts": 16,
+    "fixed_quote_chars": 500
+  },
+  "router": {
+    "enabled": false,
+    "default_tier": "strong",
+    "clean_steps": 3,
+    "strong_lock_steps": 5,
+    "cheap_context_tokens": 16000
+  },
+  "limits": {
+    "max_steps": 50,
+    "wall_seconds": 900,
+    "command_seconds": 30,
+    "task_usd": "2.50",
+    "max_output_tokens": 16384,
+    "output_head_chars": 2000,
+    "output_tail_chars": 2000,
+    "artifact_bytes": 8388608,
+    "recall_chars": 4000,
+    "format_attempts": 2
+  },
+  "progress": {
+    "edit_prompt_after": 6,
+    "repeat_warn_after": 2,
+    "repeat_block_after": 3,
+    "max_blocked_repeats": 2,
+    "final_step_warning": 10,
+    "first_edit_checkpoint": true,
+    "max_no_edit_commands": 2,
+    "post_edit_checkpoint": true
+  }
+}

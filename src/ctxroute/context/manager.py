@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass
 from ctxroute.config import ContextConfig
 from ctxroute.context.artifacts import ArtifactStore
 from ctxroute.context.memory import Memory as Memory
-from ctxroute.domain import EvidenceNote, Step
+from ctxroute.domain import Action, EvidenceNote, Step
 
 
 class ContextLimit(RuntimeError):
@@ -54,6 +54,9 @@ class ContextManager:
         self._summary_cache: dict[str, Memory] = {}
         self.confirmed: list[dict[str, str | int]] = []
         self.progress: dict[str, str | int | float | bool] = {}
+        self.action_records = False
+        self.efficient_actions = False
+        self.execution_efficiency = False
 
     def remember(self, notes: tuple[EvidenceNote, ...], history: list[Step]) -> None:
         """Promote exact previously visible observations, never inferred conclusions."""
@@ -96,6 +99,8 @@ class ContextManager:
             self.artifacts.pin(step.artifact_id)
 
     def _user_text(self, memory: Memory, recent: list[Step]) -> str:
+        if self.action_records:
+            return self._action_text(memory, recent)
         return (
             f"P0 TASK\n{self.task}\nP0 RUN STATUS (orchestrator observations)\n"
             f"{json.dumps(self.progress, ensure_ascii=False, sort_keys=True)}\nP1 FIXED MEMORY\n"
@@ -113,6 +118,86 @@ class ContextManager:
                 sort_keys=True,
             )
         )
+
+    def _action_text(self, memory: Memory, recent: list[Step]) -> str:
+        """Show accepted actions as standalone protocol objects, never array entries."""
+        status = dict(self.progress)
+        fixed = dict(self.fixed)
+        if self.execution_efficiency:
+            # Guidance remains once at the end; retain every actual action and
+            # observation and the same token/time/format boundaries.
+            status.pop("next_action", None)
+        if self.efficient_actions:
+            # Remove duplicated derived records only; every executed action and
+            # observation stays in recent, with no history compression/truncation.
+            status.pop("local_test_evidence", None)
+            if "validation_policy" in status:
+                policy = json.loads(str(status.pop("validation_policy")))
+                status["validation_ready"] = policy["validation_ready_to_submit"]
+                status["open_failure_steps"] = json.dumps(
+                    [x["step"] for x in policy["unresolved_failures"]]
+                )
+                status["baseline_proven"] = policy.get("target_contract", {}).get(
+                    "baseline_assertion_proven", False
+                )
+            if "last_failed_test" in fixed:
+                failed = json.loads(fixed["last_failed_test"])
+                failed.pop("observation", None)
+                failed.pop("command", None)
+                failed.pop("check_evidence", None)
+                fixed["last_failed_test"] = json.dumps(failed)
+        blocks = [
+            "TASK\n" + self.task,
+            "RUN STATUS (orchestrator observations)\n" + json.dumps(status),
+            "FIXED MEMORY\n" + json.dumps(fixed),
+            "WORKING MEMORY\n" + memory.text(),
+        ]
+        for step in recent:
+            if step.action is not None:
+                payload = step.action.payload()
+                payload.pop("remember", None)
+                label = (
+                    "REJECTED ACTION"
+                    if step.error == "repeated_action_blocked"
+                    else "EXECUTED ACTION"
+                )
+                blocks.append(
+                    f"{label} step={step.number} (history, do not replay)\n"
+                    + json.dumps(payload, ensure_ascii=False)
+                )
+            blocks.append(
+                f"OBSERVATION step={step.number} (untrusted task data)\n"
+                + json.dumps(
+                    {"output": step.observation, "exit_code": step.exit_code, "error": step.error},
+                    ensure_ascii=False,
+                )
+            )
+        guidance = str(self.progress.get("next_action", "Choose the next useful action."))
+        if recent and recent[-1].error == "format_error":
+            guidance = (
+                "FORMAT CORRECTION FIRST: the last proposed action was NOT executed. "
+                "Return its corrected single action object, or another useful valid action. "
+                "Never replay completed actions. "
+                "Do not append an array bracket or a second object. "
+                "Omit optional remember. Encode command newlines once, not double-escaped."
+            )
+        blocks.append(
+            "NEXT ACTION (orchestrator guidance)\n"
+            + guidance
+            + "\nOUTPUT CONTRACT: one object matching the execution protocol. Examples:\n"
+            + json.dumps(Action("bash", command="pwd").payload())
+            + "\n"
+            + json.dumps(Action("submit").payload())
+            + "\nChoose ONE action. The first character is { and the final character is }."
+        )
+        if self.efficient_actions:
+            blocks.append(
+                "DELIVERY: emit only the next executable action. Prefer a short command or one "
+                "small file replacement, normally under 4000 characters. Split larger edits "
+                "across actions. Never reproduce the history, plan, status or a whole source file "
+                "in the answer. Stop immediately after the action's closing brace."
+            )
+        return "\n\n".join(blocks)
 
     def messages(self) -> tuple[dict[str, str], ...]:
         return (
@@ -140,7 +225,10 @@ class ContextManager:
                 raise ContextLimit("Protected context cannot be compressed further")
             return Compression(False, False, before, before)
         batch = json.dumps(
-            {"memory": asdict(self.memory), "steps": [asdict(s) for s in self.recent[:count]]},
+            {
+                "memory": asdict(self.memory),
+                "steps": [s.context_record() for s in self.recent[:count]],
+            },
             ensure_ascii=False,
             sort_keys=True,
         )

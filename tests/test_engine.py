@@ -74,7 +74,7 @@ def test_format_failure_cleanup_and_corrective_feedback(tmp_path: Path) -> None:
         ArmConfig.load(ROOT / "configs/arms/A1.yaml"), model, sandbox, writer(tmp_path)
     ).run(TASK, 1)
     assert result.state.termination == "format_failure" and sandbox.destroyed
-    assert "Invalid action" in model.requests[1].messages[1]["content"]
+    assert "Action not executed" in model.requests[1].messages[1]["content"]
     assert "Return exactly one JSON action object" in model.requests[1].messages[1]["content"]
     recent = model.requests[1].messages[1]["content"].split("P3 RECENT STEPS\n", 1)[1]
     recent = recent.split("\nNEXT ACTION", 1)[0]
@@ -102,7 +102,9 @@ def test_invalid_action_never_executes_before_one_correction(tmp_path: Path) -> 
     assert sandbox.commands == []
     traces = [json.loads(line) for line in (output.path / "traces.jsonl").read_text().splitlines()]
     assert [t["tool"] for t in traces] == [None, "submit"]
-    assert traces[0]["validation_error"] == "Invalid action schema or unavailable tool"
+    assert traces[0]["validation_error"] == (
+        "Unsupported fields for bash: extra. Allowed fields: command, tool; remember is optional."
+    )
 
 
 def test_two_model_failures_stop_and_cleanup(tmp_path: Path) -> None:

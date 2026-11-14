@@ -6,9 +6,12 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
-from ctxroute.tracing.cost import money
+from ctxroute.tracing.cost import Price, Usage, money
+
+if TYPE_CHECKING:
+    from ctxroute.domain import ModelRequest
 
 Kind = Literal["model_api", "cloud_compute", "cloud_storage", "network"]
 KINDS = {"model_api", "cloud_compute", "cloud_storage", "network"}
@@ -105,6 +108,16 @@ class Ledger:
         with self._transaction() as conn:
             return self._snapshot(conn)
 
+    def reservation_bound(
+        self, request: "ModelRequest", price: Price, input_guard_tokens: int
+    ) -> Decimal:
+        return price.cost(Usage(input_guard_tokens, 0, request.max_output_tokens))
+
+    def _check_allocation(
+        self, conn: sqlite3.Connection, amount: Decimal, scope: str | None
+    ) -> None:
+        """Optional pool checks, within the same transaction as the reservation."""
+
     def freeze(self, request_id: str, revised_upper_bound: Decimal) -> None:
         """Keep an uncertain charge reserved and block after a bound violation."""
         amount = money(revised_upper_bound)
@@ -144,7 +157,8 @@ class Ledger:
             if state.blocked or projected > self.hard_limit:
                 raise BudgetStopped("Blocked ledger or hard limit exceeded")
             if projected >= self.pause_at:
-                raise BudgetStopped("80% pause threshold reached including reservations")
+                raise BudgetStopped("Configured pause threshold reached including reservations")
+            self._check_allocation(conn, amount, scope)
             if scope is not None and scope_limit is not None:
                 limit = money(scope_limit)
                 conn.execute("INSERT OR IGNORE INTO scopes VALUES(?, ?)", (scope, str(limit)))

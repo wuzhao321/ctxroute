@@ -83,6 +83,18 @@ class ProgressConfig:
     repeat_block_after: int = 3
     max_blocked_repeats: int = 2
     final_step_warning: int = 10
+    first_edit_checkpoint: bool = False
+    max_no_edit_commands: int = 2
+    post_edit_checkpoint: bool = False
+    regression_strategy: bool = False
+    regression_caller_depth: int = 2
+    regression_max_files: int = 8
+    repair_diagnostic_limit: int = 3
+    target_action_strategy: bool = False
+    delivery_behavior_strategy: bool = False
+    source_edit_strategy: bool = False
+    efficiency_strategy: bool = False
+    evidence_action_strategy: bool = False
 
     def __post_init__(self) -> None:
         values = (
@@ -91,11 +103,41 @@ class ProgressConfig:
             self.repeat_block_after,
             self.max_blocked_repeats,
             self.final_step_warning,
+            self.max_no_edit_commands,
+            self.regression_caller_depth,
+            self.regression_max_files,
+            self.repair_diagnostic_limit,
         )
         if any(type(value) is not int or value < 1 for value in values):
             raise ValueError("Progress limits must be positive integers")
         if self.repeat_warn_after >= self.repeat_block_after:
             raise ValueError("Repeat warning must precede blocking")
+        if type(self.first_edit_checkpoint) is not bool:
+            raise ValueError("First edit checkpoint must be boolean")
+        if type(self.post_edit_checkpoint) is not bool:
+            raise ValueError("Post edit checkpoint must be boolean")
+        if type(self.regression_strategy) is not bool:
+            raise ValueError("Regression strategy must be boolean")
+        if type(self.target_action_strategy) is not bool:
+            raise ValueError("Target/action strategy must be boolean")
+        if self.target_action_strategy and not self.regression_strategy:
+            raise ValueError("Target/action strategy requires regression strategy")
+        if type(self.delivery_behavior_strategy) is not bool:
+            raise ValueError("Delivery/behavior strategy must be boolean")
+        if self.delivery_behavior_strategy and not self.target_action_strategy:
+            raise ValueError("Delivery/behavior strategy requires target/action strategy")
+        if type(self.source_edit_strategy) is not bool:
+            raise ValueError("Source edit strategy must be boolean")
+        if self.source_edit_strategy and not self.target_action_strategy:
+            raise ValueError("Source edit strategy requires target/action strategy")
+        if type(self.efficiency_strategy) is not bool:
+            raise ValueError("Efficiency strategy must be boolean")
+        if self.efficiency_strategy and not self.source_edit_strategy:
+            raise ValueError("Efficiency strategy requires source edit strategy")
+        if type(self.evidence_action_strategy) is not bool:
+            raise ValueError("Evidence/action strategy must be boolean")
+        if self.evidence_action_strategy and not self.source_edit_strategy:
+            raise ValueError("Evidence/action strategy requires source edit strategy")
 
 
 @dataclass(frozen=True)

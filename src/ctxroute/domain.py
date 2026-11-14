@@ -37,11 +37,27 @@ class Action:
     end: int = 0
     remember: tuple[EvidenceNote, ...] = ()
 
+    def payload(self) -> dict[str, Any]:
+        """The action protocol, without internal defaults for unrelated tools."""
+        data: dict[str, Any] = {"tool": self.kind}
+        if self.kind == "bash":
+            data["command"] = self.command
+        elif self.kind == "recall":
+            data.update(id=self.artifact_id, start=self.start, end=self.end)
+        if self.remember:
+            data["remember"] = [asdict(note) for note in self.remember]
+        return data
+
     @classmethod
     def parse(cls, text: str, *, recall_enabled: bool) -> "Action":
         try:
             raw: Any = json.loads(text)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as exc:
+            if exc.msg == "Extra data":
+                raise ValueError(
+                    "Return exactly one JSON action object. Unexpected trailing content: "
+                    "end after the closing }. Do not append ] or a second action."
+                ) from None
             raise ValueError("Return exactly one JSON action object") from None
         if not isinstance(raw, dict):
             raise ValueError("Action must be an object")
@@ -64,6 +80,18 @@ class Action:
                     raise ValueError("Invalid evidence reference")
                 notes.append(EvidenceNote(item["step"], item["quote"]))
         kind = data.get("tool")
+        allowed = {
+            "bash": {"tool", "command"},
+            "submit": {"tool"},
+            "recall": {"tool", "id", "start", "end"},
+        }
+        if isinstance(kind, str) and kind in allowed:
+            extra = set(data) - allowed[kind]
+            if extra:
+                raise ValueError(
+                    f"Unsupported fields for {kind}: {', '.join(sorted(extra))}. "
+                    f"Allowed fields: {', '.join(sorted(allowed[kind]))}; remember is optional."
+                )
         if kind == "submit" and set(data) == {"tool"}:
             return cls("submit", remember=tuple(notes))
         if kind == "bash" and set(data) == {"tool", "command"}:
@@ -99,8 +127,13 @@ class Step:
     error: str | None = None
     artifact_id: str | None = None
 
+    def context_record(self) -> dict[str, Any]:
+        data = asdict(self)
+        data["action"] = self.action.payload() if self.action is not None else None
+        return data
+
     def text(self) -> str:
-        return json.dumps(asdict(self), ensure_ascii=False, sort_keys=True)
+        return json.dumps(self.context_record(), ensure_ascii=False, sort_keys=True)
 
 
 @dataclass
