@@ -81,6 +81,9 @@ class DockerSandbox:
     ) -> None:
         self.registry, self.config, self.executor = registry, config, executor
         self.owned: set[str] = set()
+        self.bases: dict[str, str] = {}
+        self.stopped: set[str] = set()
+        self.terminated: set[str] = set()
         if config["cpus"] <= 0 or config["pids_limit"] < 1 or config["output_bytes"] < 1:
             raise ValueError("Invalid sandbox resources")
 
@@ -99,6 +102,8 @@ class DockerSandbox:
         image = self.registry[task.instance_id]
         if re.search(r"(?:@|^)sha256:[a-f0-9]{64}$", image) is None:
             raise ValueError("Require an audited, digest-pinned task image")
+        if re.fullmatch(r"[a-f0-9]{40}", task.base_commit) is None:
+            raise ValueError("Require an exact task base commit")
         name = "ctxroute-" + uuid4().hex
         argv = [
             "create",
@@ -132,6 +137,7 @@ class DockerSandbox:
             self._run(["rm", "-f", name])
             raise RuntimeError("Container creation failed")
         self.owned.add(name)
+        self.bases[name] = task.base_commit
         result = self._run(["start", name])
         if result.code != 0 or result.timed_out:
             self.destroy(name)
@@ -140,6 +146,8 @@ class DockerSandbox:
 
     def execute(self, handle: str, command: str, timeout: float) -> Observation:
         self._check(handle)
+        if handle in self.terminated:
+            raise ValueError("Terminated task may only export its patch or be destroyed")
         duration = min(timeout, self.config["command_timeout_seconds"])
         if duration <= 0:
             raise ValueError("Command has no remaining time allowance")
@@ -161,11 +169,21 @@ class DockerSandbox:
         if timed_out or result.output_limited:
             # Killing docker's host client alone does not kill the container process.
             # Stop this owned container to guarantee no orphan command remains.
-            self._run(["kill", handle])
+            self.terminated.add(handle)
+            killed = self._run(["kill", handle])
+            if killed.code == 0 and not killed.timed_out:
+                self.stopped.add(handle)
         return Observation(result.output, result.code, timed_out, result.output_limited)
 
     def patch(self, handle: str) -> str:
         self._check(handle)
+        if handle in self.stopped:
+            # The fixed entrypoint is /bin/sleep, not the terminated task command.
+            # Starting it permits export of the final filesystem; task exec stays disabled.
+            started = self._run(["start", handle])
+            if started.code != 0 or started.timed_out:
+                raise RuntimeError("Cannot restart stopped container for patch export")
+            self.stopped.remove(handle)
         result = self._run(
             [
                 "exec",
@@ -174,7 +192,7 @@ class DockerSandbox:
                 f"{self.config['control_timeout_seconds']}s",
                 "bash",
                 "-lc",
-                "git add -N -- . && git diff --binary HEAD --",
+                f"git add -N -- . && git diff --binary {self.bases[handle]} --",
             ]
         )
         if result.code != 0 or result.timed_out or result.output_limited:
@@ -187,3 +205,6 @@ class DockerSandbox:
         if result.code != 0 or result.timed_out:
             raise RuntimeError("Container cleanup failed; resource requires attention")
         self.owned.remove(handle)
+        self.bases.pop(handle)
+        self.stopped.discard(handle)
+        self.terminated.discard(handle)

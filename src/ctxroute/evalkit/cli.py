@@ -9,12 +9,23 @@ from typing import Any
 from ctxroute.domain import Task
 from ctxroute.evalkit.analysis import import_harness_report, write_analysis
 from ctxroute.evalkit.campaign import create_plan, load_plan, load_tasks, run_plan
+from ctxroute.evalkit.contracts import frozen_path
 from ctxroute.evalkit.export import collect_predictions, harness_command
 from ctxroute.runtime import build_live_engine
 from ctxroute.sandbox.base import Sandbox
 from ctxroute.sandbox.docker import DockerSandbox
 from ctxroute.tools.mcp_client import McpSandbox, StdioClient
 from ctxroute.tracing.stage_budget import StageBudget, load_budget, open_budget_ledger
+
+
+def mappings(values: list[str]) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for value in values:
+        key, separator, item = value.partition("=")
+        if not separator or not item or key in result:
+            raise ValueError("Use one ARM=value entry per arm")
+        result[key] = item
+    return result
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -31,6 +42,10 @@ def main(argv: list[str] | None = None) -> None:
     plan.add_argument("--count", type=int, default=5)
     plan.add_argument("--truncate", action="store_true")
     plan.add_argument("--output", type=Path, required=True)
+    plan.add_argument("--tasks", type=Path, required=True)
+    plan.add_argument("--images", type=Path, required=True)
+    plan.add_argument("--arm-config", action="append", default=[], metavar="ARM=PATH")
+    plan.add_argument("--budget-lane", action="append", default=[], metavar="ARM=LANE")
     run = commands.add_parser(
         "run", help="Explicit paid inference; currently disabled by configuration"
     )
@@ -42,6 +57,9 @@ def main(argv: list[str] | None = None) -> None:
     analyze.add_argument("--runs", type=Path, nargs="+", required=True)
     analyze.add_argument("--output", type=Path, required=True)
     analyze.add_argument("--baseline", default="A1")
+    analyze.add_argument(
+        "--allow-unverified", action="store_true", help="Historical descriptive analysis only"
+    )
     baseline = commands.add_parser("import-baseline")
     baseline.add_argument("--source", type=Path, required=True)
     baseline.add_argument("--output", type=Path, default=Path("results/runs"))
@@ -52,6 +70,7 @@ def main(argv: list[str] | None = None) -> None:
     grade = commands.add_parser("import-grade")
     grade.add_argument("--run", type=Path, required=True)
     grade.add_argument("--report", type=Path, required=True)
+    grade.add_argument("--receipt", type=Path, required=True)
     export = commands.add_parser("export")
     export.add_argument("--runs", type=Path, nargs="+", required=True)
     export.add_argument("--output", type=Path, required=True)
@@ -65,7 +84,15 @@ def main(argv: list[str] | None = None) -> None:
     root = Path.cwd()
     if args.command == "plan":
         result = create_plan(
-            root, args.output, arms=args.arms, count=args.count, truncate=args.truncate
+            root,
+            args.output,
+            arms=args.arms,
+            count=args.count,
+            truncate=args.truncate,
+            tasks_path=args.tasks,
+            images_path=args.images,
+            arm_configs=mappings(args.arm_config),
+            budget_lanes=mappings(args.budget_lane),
         )
         print(
             json.dumps(
@@ -79,7 +106,11 @@ def main(argv: list[str] | None = None) -> None:
             )
         )
     elif args.command == "analyze":
-        print(write_analysis(args.runs, args.output, args.baseline))
+        print(
+            write_analysis(
+                args.runs, args.output, args.baseline, allow_unverified=args.allow_unverified
+            )
+        )
     elif args.command == "import-baseline":
         from ctxroute.evalkit.baseline import import_baseline
 
@@ -89,7 +120,7 @@ def main(argv: list[str] | None = None) -> None:
 
         pareto_plot(args.analysis, args.output)
     elif args.command == "import-grade":
-        print(import_harness_report(args.run, args.report))
+        print(import_harness_report(args.run, args.report, json.loads(args.receipt.read_text())))
     elif args.command == "export":
         collect_predictions(args.runs, args.output)
         print(args.output)
@@ -115,6 +146,8 @@ def execute_campaign(root: Path, plan: Path, tasks: Path, images: Path, *, execu
     ):
         raise RuntimeError("Execution disabled: this phase only implements experiment code")
     frozen = load_plan(root, plan)
+    if frozen_path(root, images) != frozen["inputs"]["images"]:
+        raise ValueError("Execution must use the planned image registry")
     policy = budget.get("stage_policy")
     if isinstance(policy, StageBudget) and any(
         job.get("budget_lane") not in policy.allocations() for job in frozen["jobs"]

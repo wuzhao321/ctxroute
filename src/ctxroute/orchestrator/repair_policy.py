@@ -251,6 +251,18 @@ class RepairPolicy:
                 failures=previous_failures,
             )
 
+    def reject_action(self, command: str, step: int) -> None:
+        """Count a rejected proposal without inventing an executed check or resetting limits."""
+        if self.unresolved:
+            self.diagnostics += 1
+            if self.source:
+                self.source.diagnostics += 1
+                self.source.last_diagnostic = {
+                    "step": step,
+                    "command": command[:1000],
+                    "executed": False,
+                }
+
     @property
     def can_submit(self) -> bool:
         if self.source and not production_patch(self.patch):

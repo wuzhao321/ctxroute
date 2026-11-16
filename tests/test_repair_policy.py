@@ -6,12 +6,14 @@ import os
 import shlex
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from ctxroute.config import ArmConfig, ProgressConfig
+from ctxroute.context.manager import Compression, ContextManager, Memory
 from ctxroute.domain import Observation, Task
 from ctxroute.models.scripted import ScriptedModel
 from ctxroute.orchestrator.engine import Engine
@@ -247,6 +249,26 @@ def test_actual_regression_failure_repair_retest_target_and_submit(tmp_path: Pat
         None,
     ]
     assert "repair_specific_failure" in model.requests[1].messages[-1]["content"]
+
+
+def test_compression_event_is_retained_before_automatic_verification(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Inject a compression outcome to isolate the automatic-step recording path.
+    original = ContextManager.compress
+
+    def compress(manager: ContextManager, callback: Callable[[str], Memory]) -> Compression:
+        if len(manager.recent) == 1:
+            return Compression(True, True, 100, 50, 1)
+        return original(manager, callback)
+
+    monkeypatch.setattr(ContextManager, "compress", compress)
+    _, run, _ = run_fixture(tmp_path, ["edit-bad", "edit-good"])
+    lifecycle = [json.loads(line) for line in (run / "lifecycle.jsonl").read_text().splitlines()]
+    traces = [json.loads(line) for line in (run / "traces.jsonl").read_text().splitlines()]
+    compressions = [item for item in lifecycle if item["event"] == "compression"]
+    assert len(compressions) == 1 and compressions[0]["step"] == 2
+    assert traces[1]["origin"] == "automatic_verification"
 
 
 def test_submit_with_known_failure_becomes_explicit_incomplete(tmp_path: Path) -> None:

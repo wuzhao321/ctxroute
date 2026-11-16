@@ -8,7 +8,8 @@
     "hard_ratio": 0.9,
     "mode": "summary",
     "fixed_max_facts": 16,
-    "fixed_quote_chars": 500
+    "fixed_quote_chars": 500,
+    "recall_enabled": true
   },
   "router": {
     "enabled": true,

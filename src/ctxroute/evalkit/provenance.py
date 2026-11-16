@@ -33,6 +33,7 @@ def controlled_variables(
         prompts = {"agent": native_config["agent"], "model": native_config["model"]}
         protocol = "native_text_action"
     return {
+        "engine": cfg.engine,
         "action_protocol": protocol,
         "response_format": "json_object" if native_config is None else "text",
         "prompt_config_sha256": hashlib.sha256(
@@ -45,6 +46,10 @@ def controlled_variables(
         "command_classifier_version": CLASSIFIER_VERSION if native_config is None else None,
         "temperature": 0,
         "thinking": runtime["thinking"],
+        "input_guard_tokens": runtime.get("input_guard_tokens"),
+        "model_attempts": runtime.get("model_attempts"),
+        "backoff_seconds": runtime.get("backoff_seconds"),
+        "harness_version": runtime.get("harness_version"),
         "model_transport": "http" if native_config is not None else runtime["model_transport"],
         "tool_transport": runtime["tool_transport"],
         "sandbox": sandbox,

@@ -9,10 +9,11 @@ STAGE ?= prepare
 REPORTS ?= results/private/reports.json
 OUTPUT ?= results/analysis/$(ARM)
 EXECUTE ?=
+PLAN_OPTIONS ?=
 
 .PHONY: plan reproduce check
 plan:
-	$(PYTHON) -m ctxroute.evalkit.cli plan --arms $(ARM) --count $(COUNT) --output $(PLAN)
+	$(PYTHON) -m ctxroute.evalkit.cli plan --arms $(ARM) --count $(COUNT) --tasks $(TASKS) --images $(IMAGES) --output $(PLAN) $(PLAN_OPTIONS)
 
 # Default stage is offline. Inference additionally needs EXECUTE=--execute and live config.
 reproduce:

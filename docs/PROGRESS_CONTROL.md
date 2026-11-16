@@ -142,6 +142,14 @@ trace 保存 `command_class`、`command_classifier_version`、`progress` 和 `ex
 
 该策略不增加诊断机会。最终机会明确要求基于已有证据作出下一步决策；缺少事实仍可提出具体问题进行一次定向诊断，随后没有生产改动则如实停止。输出提示要求交付可验证的小动作，避免在一次响应内推演整个修复；合法性仍由原严格动作协议判定。测试使用详细错误与局部变量输出，但断言、选择器、失败覆盖、提交门及资源限制不变。
 
+## 可选的有限动作恢复
+
+`progress.failure_recovery_strategy` 默认关闭，依赖源码编辑策略。格式失败后保留被拒响应的有界反馈；若它是一个通过原 Schema 校验的对象后仅多出单个 `]`，向下一请求展示其尚未执行的候选动作。候选只用于重新生成，不删除尾随字符后执行。模型必须重新交付严格合法且工具和参数不变的完整动作；两次格式失败停止及原步数、时间、费用限制不变。多对象、数组、其他后缀、过长候选与非法 Schema 不抽取为候选。
+
+对于直接 Python 脚本以非零退出码结束、完整 traceback 最后一行为明确参数绑定 TypeError、且 diff 未变化的模型诊断，记录调用错误并提前阻止相同命令重放。普通源码搜索中的错误文本、退出零、超时、截断和自动测试不触发这一规则。记录可跨只读动作保留；diff 改变或执行另一条非只读命令时失效，因为后者可能改变未跟踪文件或环境。它不推断任意程序的语义等价或完整环境状态。
+
+被阻止的提案记录 `executed=false`，消耗原有诊断额度，连续拦截沿用 `max_blocked_repeats` 停止。错误反馈优先要求修正调用或定向查看签名，不生成源码补丁，不改变测试证据或清除已有失败。编辑后的目标和回归仍由编排器独立执行；该策略不拆分或改写模型提供的复合 shell 命令。实际模型是否更可靠仍须以新冻结实验验证。
+
 ## 配置依赖与验证
 
 | `progress` 开关 | 配置依赖 |
@@ -149,6 +157,6 @@ trace 保存 `command_class`、`command_classifier_version`、`progress` 和 `ex
 | `first_edit_checkpoint`、`post_edit_checkpoint`、`regression_strategy` | 可分别配置，作用范围见对应章节 |
 | `target_action_strategy` | 需要 `regression_strategy` |
 | `delivery_behavior_strategy`、`source_edit_strategy` | 需要 `target_action_strategy` |
-| `efficiency_strategy`、`evidence_action_strategy` | 需要 `source_edit_strategy` |
+| `efficiency_strategy`、`evidence_action_strategy`、`failure_recovery_strategy` | 需要 `source_edit_strategy` |
 
 配置校验拒绝缺少依赖的组合。开关改变提示、验证或终止语义，比较时应固定完整配置与源码版本。相关离线用例和质量门见 [DEVELOPMENT](DEVELOPMENT.md)；这些检查验证状态传递和执行规则，不证明模型修复率、压缩收益或推理模式的效果。

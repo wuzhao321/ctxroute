@@ -8,6 +8,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, cast
 
+from ctxroute.evalkit.contracts import check_pair
 from ctxroute.evalkit.statistics import bootstrap, mcnemar, percentile
 from ctxroute.router.rules import classify
 
@@ -20,11 +21,45 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
     )
 
 
-def import_harness_report(run_dir: Path, report: Path) -> Path:
+def verify_grading_receipt(
+    run_dir: Path,
+    report: Path,
+    receipt: dict[str, Any] | None,
+    expected_grading_run_id: str | None = None,
+) -> None:
+    manifest = json.loads((run_dir / "manifest.json").read_text())
+    expected = {
+        "inference_run_id": manifest["run_id"],
+        "instance_id": manifest["instance_id"],
+        "predictions_sha256": hashlib.sha256(
+            (run_dir / "predictions.jsonl").read_bytes()
+        ).hexdigest(),
+        "report_sha256": hashlib.sha256(report.read_bytes()).hexdigest(),
+        "harness_version": manifest.get("harness_version"),
+    }
+    if (
+        receipt is None
+        or not isinstance(expected["harness_version"], str)
+        or not expected["harness_version"]
+        or any(receipt.get(k) != v for k, v in expected.items())
+        or not isinstance(receipt.get("grading_run_id"), str)
+        or not receipt["grading_run_id"]
+        or (
+            expected_grading_run_id is not None
+            and receipt["grading_run_id"] != expected_grading_run_id
+        )
+    ):
+        raise ValueError("Official report requires a matching independent grading receipt")
+
+
+def import_harness_report(
+    run_dir: Path, report: Path, receipt: dict[str, Any] | None = None
+) -> Path:
     """Import one official per-instance report; no inference code reads grading data."""
     manifest = json.loads((run_dir / "manifest.json").read_text())
     if manifest.get("kind") != "agent_run" or not manifest.get("finished_at"):
         raise ValueError("Only completed real runs accept grades")
+    verify_grading_receipt(run_dir, report, receipt)
     instance = manifest["instance_id"]
     raw = json.loads(report.read_text())
     item = raw.get(instance)
@@ -46,6 +81,7 @@ def import_harness_report(run_dir: Path, report: Path) -> Path:
         ).hexdigest(),
         "harness_version": manifest.get("harness_version"),
         "provenance": "operator-supplied official harness report",
+        "grading_receipt": receipt,
     }
     with target.open("x") as output:
         json.dump(record, output, indent=2)
@@ -59,6 +95,10 @@ def summarize_run(directory: Path) -> dict[str, Any]:
         raise ValueError("Synthetic runs are excluded from experimental analysis")
     events = read_jsonl(directory / "traces.jsonl")
     requests = read_jsonl(directory / "requests.jsonl")
+    lifecycle = read_jsonl(directory / "lifecycle.jsonl")
+    compressions = [event for event in lifecycle if event.get("event") == "compression"]
+    if not compressions:
+        compressions = [event["compress_event"] for event in events if event.get("compress_event")]
     by_request: dict[str, dict[str, Any]] = {}
     for event in requests:
         by_request.setdefault(event["request_id"], {}).update(event)
@@ -86,8 +126,13 @@ def summarize_run(directory: Path) -> dict[str, Any]:
     ]
     seen: set[str] = set()
     repeated_after, reads_after, compressed = 0, 0, False
+    accepted_steps = {
+        item["step"] for item in compressions if item.get("accepted") and "step" in item
+    }
     for event in events:
-        compressed |= bool(event.get("compress_event", {}).get("accepted"))
+        compressed |= event.get("step") in accepted_steps or bool(
+            event.get("compress_event", {}).get("accepted")
+        )
         command = event.get("command")
         if (
             command
@@ -119,7 +164,20 @@ def summarize_run(directory: Path) -> dict[str, Any]:
         "seed": manifest["seed"],
         "split": manifest.get("split", "dev"),
         "resolved": resolved,
+        "provenance": {
+            "source": manifest.get("source_tree_sha256", manifest.get("source_sha256")),
+            "price": manifest.get("price_sha256"),
+            "task": manifest.get("task_sha256"),
+            "image": manifest.get("image_digest"),
+            "controls": manifest.get("controls"),
+        },
         "termination": manifest.get("termination", "interrupted"),
+        "primary_termination": manifest.get("primary_termination", manifest.get("termination")),
+        "cleanup_status": manifest.get("cleanup_status", "unrecorded"),
+        "termination_details": [
+            event for event in lifecycle if event.get("event") == "termination_reason"
+        ],
+        "patch_export_status": manifest.get("patch_export_status", "unrecorded"),
         "wall_ms": manifest.get("wall_ms"),
         "steps": manifest.get("steps", len(events)),
         "cost_upper_usd": sum(costs) if by_request else None,
@@ -130,14 +188,18 @@ def summarize_run(directory: Path) -> dict[str, Any]:
         "compression_requests": sum(
             item.get("purpose") == "compression" for item in by_request.values()
         ),
-        "failed_requests": sum(item.get("event") == "failed" for item in by_request.values()),
-        "compression_count": sum(
-            bool(event.get("compress_event", {}).get("accepted")) for event in events
+        "action_requests_by_tier": dict(
+            Counter(item["tier"] for item in by_request.values() if item.get("purpose") == "action")
         ),
+        "compression_requests_by_tier": dict(
+            Counter(
+                item["tier"] for item in by_request.values() if item.get("purpose") == "compression"
+            )
+        ),
+        "failed_requests": sum(item.get("event") == "failed" for item in by_request.values()),
+        "compression_count": sum(bool(event.get("accepted")) for event in compressions),
         "compression_tokens_saved": sum(
-            event["ctx_tokens_before"] - event["ctx_tokens_after"]
-            for event in events
-            if event.get("compress_event", {}).get("accepted")
+            event["before"] - event["after"] for event in compressions if event.get("accepted")
         ),
         "format_errors": sum(event.get("error_type") == "format_error" for event in events),
         "blocked_repeat_actions": sum(
@@ -154,12 +216,21 @@ def summarize_run(directory: Path) -> dict[str, Any]:
         "post_compression_repeat_read_rate": repeated_after / reads_after if reads_after else None,
         "tier_tokens": tier_tokens,
         "tier_steps": dict(Counter(event["tier"] for event in events)),
-        "max_context_tokens": max((event["ctx_tokens_before"] for event in events), default=0),
+        "max_context_tokens": max(
+            (
+                event["ctx_tokens_before"]
+                for event in events
+                if event.get("ctx_tokens_before") is not None
+            ),
+            default=0,
+        ),
         "evidence_path": str(directory.resolve()),
     }
 
 
-def paired_comparison(rows: list[dict[str, Any]], baseline: str, candidate: str) -> dict[str, Any]:
+def paired_comparison(
+    rows: list[dict[str, Any]], baseline: str, candidate: str, *, allow_unverified: bool = False
+) -> dict[str, Any]:
     grouped: dict[str, dict[str, dict[int, dict[str, Any]]]] = defaultdict(
         lambda: defaultdict(dict)
     )
@@ -180,11 +251,19 @@ def paired_comparison(rows: list[dict[str, Any]], baseline: str, candidate: str)
     cost_excluded: list[str] = []
     latency_excluded: list[str] = []
     single_seed = True
+    unverified: dict[str, str] = {}
     for instance in sorted(set(left) | set(right)):
         a, b = left.get(instance, {}), right.get(instance, {})
         if not a or set(a) != set(b):
             excluded[instance] = "missing arm or mismatched seeds"
             continue
+        for seed in a:
+            try:
+                check_pair(a[seed], b[seed])
+            except ValueError as exc:
+                if not allow_unverified:
+                    raise
+                unverified[instance] = str(exc)
         if any(item["resolved"] is None for item in [*a.values(), *b.values()]):
             excluded[instance] = "missing official grade"
             continue
@@ -220,6 +299,10 @@ def paired_comparison(rows: list[dict[str, Any]], baseline: str, candidate: str)
         "baseline": baseline,
         "candidate": candidate,
         "analysis": "dev exploratory",
+        "comparability": "external_reference"
+        if "A0" in {baseline, candidate}
+        else ("unverified_historical" if unverified else "verified"),
+        "unverified_conditions": unverified,
         "success_difference": success,
         "excluded_pairs": excluded,
         "mcnemar": mcnemar(binary) if single_seed and binary else None,
@@ -235,7 +318,9 @@ def paired_comparison(rows: list[dict[str, Any]], baseline: str, candidate: str)
     }
 
 
-def write_analysis(run_dirs: list[Path], target: Path, baseline: str = "A1") -> Path:
+def write_analysis(
+    run_dirs: list[Path], target: Path, baseline: str = "A1", *, allow_unverified: bool = False
+) -> Path:
     rows = [summarize_run(directory) for directory in run_dirs]
     if not rows:
         raise ValueError("No experimental evidence supplied")
@@ -271,7 +356,7 @@ def write_analysis(run_dirs: list[Path], target: Path, baseline: str = "A1") -> 
             / len(selected),
         }
     comparisons = [
-        paired_comparison(rows, baseline, candidate)
+        paired_comparison(rows, baseline, candidate, allow_unverified=allow_unverified)
         for candidate in labels
         if candidate != baseline
     ]
@@ -358,6 +443,16 @@ def write_analysis(run_dirs: list[Path], target: Path, baseline: str = "A1") -> 
             f"| {label} | {row['started']} | {row['graded']} | {row['missing_grades']} | "
             f"{row['successes_over_started']} | "
             f"{row['graded_pass_at_1']} | {row['wall_p50_ms']} | {row['wall_p95_ms']} |"
+        )
+    report.extend(["", "| 配对 | 对照条件状态 |", "|---|---|"])
+    for comparison in comparisons:
+        report.append(
+            f"| {comparison['baseline']} → {comparison['candidate']} | "
+            f"{comparison['comparability']} |"
+        )
+    if any(item["comparability"] == "unverified_historical" for item in comparisons):
+        report.extend(
+            ["", "存在未经验证或不一致的历史对照条件；这些配对仅作描述，不能归因于压缩或路由。"]
         )
     report.extend(
         [

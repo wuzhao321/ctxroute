@@ -54,17 +54,22 @@ def test_compression_calls_cheap_layer_with_same_task_budget(tmp_path: Path) -> 
         limits=replace(cfg.limits, output_head_chars=1000, output_tail_chars=1000),
     )
     # Distinct reads exercise compression without deliberately triggering the loop guard.
-    commands = [f"cat file{i}" for i in range(15)]
+    commands = [f"cat file{i} | head -20" for i in range(15)]
     model = ScriptedModel(
         [json.dumps({"tool": "bash", "command": c}) for c in commands] + ['{"tool":"submit"}']
     )
     sandbox = FakeSandbox({c: Observation("x" * 1500, 0) for c in commands})
-    result = Engine(cfg, model, sandbox, writer(tmp_path)).run(TASK, 1)
+    output = writer(tmp_path)
+    result = Engine(cfg, model, sandbox, output).run(TASK, 1)
     assert result.state.termination == "submitted"
     summaries = [r for r in model.requests if r.purpose == "compression"]
     assert summaries and all(r.tier == "cheap" and r.scope_limit == D("0.20") for r in summaries)
     assert all(r.response_format == "json_object" for r in summaries)
     assert any(r.tier == "cheap" for r in model.requests if r.purpose == "action")
+    lifecycle = [
+        json.loads(line) for line in (output.path / "lifecycle.jsonl").read_text().splitlines()
+    ]
+    assert any(item.get("event") == "compression" and item["accepted"] for item in lifecycle)
 
 
 def test_format_failure_cleanup_and_corrective_feedback(tmp_path: Path) -> None:
@@ -170,10 +175,48 @@ def test_recorded_over_budget_response_terminates(tmp_path: Path) -> None:
             )
 
     sandbox = FakeSandbox()
+    output = writer(tmp_path)
     result = Engine(
-        ArmConfig.load(ROOT / "configs/arms/A1.yaml"), Expensive(), sandbox, writer(tmp_path)
+        ArmConfig.load(ROOT / "configs/arms/A1.yaml"), Expensive(), sandbox, output
     ).run(TASK, 1)
     assert result.state.termination == "budget_limit" and sandbox.destroyed
+    lifecycle = (output.path / "lifecycle.jsonl").read_text()
+    assert '"layer": "execution_cost_bound"' in lifecycle
+
+
+@pytest.mark.parametrize("cleanup_fails", [False, True])
+def test_final_export_failure_keeps_last_observation_without_claiming_final_patch(
+    tmp_path: Path, cleanup_fails: bool
+) -> None:
+    class LostExport(FakeSandbox):
+        reads = 0
+
+        def patch(self, handle: str) -> str:
+            self.reads += 1
+            if self.reads > 2:
+                raise RuntimeError("synthetic export unavailable")
+            return "" if self.reads == 1 else "diff --git a/file b/file\n+changed\n"
+
+        def destroy(self, handle: str) -> None:
+            super().destroy(handle)
+            if cleanup_fails:
+                raise RuntimeError("synthetic cleanup unavailable")
+
+    output = writer(tmp_path)
+    sandbox = LostExport()
+    model = ScriptedModel(['{"tool":"bash","command":"edit"}', '{"tool":"submit"}'])
+    result = Engine(ArmConfig.load(ROOT / "configs/arms/A1.yaml"), model, sandbox, output).run(
+        TASK, 1
+    )
+    assert result.state.termination == (
+        "cleanup_failed" if cleanup_fails else "patch_export_failed"
+    )
+    assert output.manifest["primary_termination"] == "submitted"
+    assert output.manifest["patch_export_status"] == "failed"
+    saved_manifest = json.loads((output.path / "manifest.json").read_text())
+    assert saved_manifest["last_observed_patch"]["step"] == 1
+    assert "+changed" in (output.path / "last-observed.patch").read_text()
+    assert json.loads((output.path / "predictions.jsonl").read_text())["model_patch"] == ""
 
 
 def test_unchanged_loop_blocks_execution_but_accounts_for_model_calls(tmp_path: Path) -> None:

@@ -119,7 +119,7 @@ class NativeModel:
             if remaining <= 0:
                 raise TimeoutError("Native run deadline reached")
             if self.state.accounted_cost >= self.cfg.limits.budget:
-                raise BudgetStopped("Native task budget exhausted")
+                raise BudgetStopped("Native task budget exhausted", layer="execution_cost_bound")
             request = ModelRequest(
                 messages,
                 "strong",
@@ -134,7 +134,9 @@ class NativeModel:
                 response = self.model.complete(request)
                 self.state.accounted_cost += response.cost_upper
                 if self.state.accounted_cost > self.cfg.limits.budget:
-                    raise BudgetStopped("Native task cost exceeded allowance")
+                    raise BudgetStopped(
+                        "Native task cost exceeded allowance", layer="execution_cost_bound"
+                    )
                 if self.clock() >= self.deadline:
                     raise TimeoutError("Native model exceeded remaining time")
                 return response
@@ -391,14 +393,28 @@ class MiniSweRunner:
                     "step_limit" if state.step >= self.cfg.limits.max_steps else "budget_limit"
                 )
             state.termination = state.termination or "native_exit"
-        except BudgetStopped:
+        except BudgetStopped as exc:
             state.termination = "budget_limit"
-        except ContextLimit:
+            self.writer.append(
+                "lifecycle", {"event": "termination_reason", "layer": exc.layer, "reason": str(exc)}
+            )
+        except ContextLimit as exc:
             state.termination = "context_limit"
+            self.writer.append(
+                "lifecycle", {"event": "termination_reason", "layer": "context", "reason": str(exc)}
+            )
         except TimeoutError:
             state.termination = "wall_timeout"
-        except ModelFailure:
+        except ModelFailure as exc:
             state.termination = "model_failure"
+            self.writer.append(
+                "lifecycle",
+                {
+                    "event": "termination_reason",
+                    "layer": "model_gateway",
+                    "reason": str(exc),
+                },
+            )
         except NativeBoundaryStop:
             pass
         except Exception as exc:
@@ -407,16 +423,25 @@ class MiniSweRunner:
                 "lifecycle", {"event": "native_execution_error", "type": type(exc).__name__}
             )
         finally:
+            self.writer.manifest.update(
+                primary_termination=state.termination or "execution_error",
+                cleanup_status="not_created",
+                patch_export_status="not_created",
+            )
             if handle is not None:
                 try:
                     patch = self.sandbox.patch(handle)
+                    self.writer.manifest["patch_export_status"] = "complete"
                 except Exception:
+                    self.writer.manifest["patch_export_status"] = "failed"
                     self.writer.append("lifecycle", {"event": "patch_export_failed"})
                     if state.termination == "submitted":
                         state.termination = "patch_export_failed"
                 try:
                     self.sandbox.destroy(handle)
+                    self.writer.manifest["cleanup_status"] = "complete"
                 except Exception:
+                    self.writer.manifest["cleanup_status"] = "failed"
                     state.termination = "cleanup_failed"
                     self.writer.append("lifecycle", {"event": "cleanup_failed", "handle": handle})
             self.writer.manifest.update(

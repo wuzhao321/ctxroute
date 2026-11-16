@@ -19,8 +19,15 @@ class ContextConfig:
     mode: Literal["none", "summary", "truncate"]
     fixed_max_facts: int = 16
     fixed_quote_chars: int = 500
+    recall_enabled: bool | None = None
+
+    @property
+    def can_recall(self) -> bool:
+        return self.mode != "none" if self.recall_enabled is None else self.recall_enabled
 
     def __post_init__(self) -> None:
+        if self.recall_enabled is not None and type(self.recall_enabled) is not bool:
+            raise ValueError("recall_enabled must be boolean or omitted for historical configs")
         if self.budget_tokens <= 0 or self.recent_steps < 1:
             raise ValueError("Invalid context limits")
         if not 0 < self.soft_ratio < self.hard_ratio <= 1:
@@ -95,6 +102,7 @@ class ProgressConfig:
     source_edit_strategy: bool = False
     efficiency_strategy: bool = False
     evidence_action_strategy: bool = False
+    failure_recovery_strategy: bool = False
 
     def __post_init__(self) -> None:
         values = (
@@ -138,6 +146,10 @@ class ProgressConfig:
             raise ValueError("Evidence/action strategy must be boolean")
         if self.evidence_action_strategy and not self.source_edit_strategy:
             raise ValueError("Evidence/action strategy requires source edit strategy")
+        if type(self.failure_recovery_strategy) is not bool:
+            raise ValueError("Failure recovery strategy must be boolean")
+        if self.failure_recovery_strategy and not self.source_edit_strategy:
+            raise ValueError("Failure recovery strategy requires source edit strategy")
 
 
 @dataclass(frozen=True)

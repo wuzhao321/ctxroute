@@ -10,7 +10,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, cast
 
-from ctxroute.evalkit.analysis import import_harness_report, write_analysis
+from ctxroute.evalkit.analysis import import_harness_report, verify_grading_receipt, write_analysis
 from ctxroute.evalkit.campaign import canonical_hash, digest, load_plan
 from ctxroute.evalkit.export import collect_predictions, harness_command
 
@@ -178,13 +178,24 @@ def finalize(root: Path, directory: Path, reports_path: Path, output: Path) -> P
         raise ValueError("Reports must map scheduled run IDs to official report paths")
     # Validate the complete supplied mapping before importing any grades.
     resolved: dict[str, Path] = {}
+    grading: dict[str, dict[str, Any]] = {}
+    expected_ids = {
+        job["run_id"]: receipt["cohorts"][cohort]["grading_run_id"]
+        for cohort, jobs in workflow["cohorts"].items()
+        for job in jobs
+    }
     for run in runs:
         if run.name not in reports:
             continue  # Missing grades remain explicit in the analysis.
-        item = reports[run.name]
-        if not isinstance(item, str):
-            raise ValueError("Report path must be a string")
-        report = local(root, Path(item))
+        supplied_item = reports[run.name]
+        if not isinstance(supplied_item, dict):
+            raise ValueError("Each report mapping requires report and receipt fields")
+        entry = cast(dict[str, Any], supplied_item)
+        if not isinstance(entry.get("report"), str) or not isinstance(entry.get("receipt"), dict):
+            raise ValueError("Each report mapping requires report and receipt fields")
+        report = local(root, Path(entry["report"]))
+        grading[run.name] = entry["receipt"]
+        verify_grading_receipt(run, report, grading[run.name], expected_ids[run.name])
         raw: Any = json.loads(report.read_text())
         instance = json.loads((run / "manifest.json").read_text())["instance_id"]
         if not isinstance(raw, dict):
@@ -210,7 +221,7 @@ def finalize(root: Path, directory: Path, reports_path: Path, output: Path) -> P
     for run in runs:
         report = resolved.get(run.name)
         if not (run / "grade.json").exists() and report is not None:
-            import_harness_report(run, report)
+            import_harness_report(run, report, grading[run.name])
     result = write_analysis(runs, output)
     immutable_json(
         result / "workflow-provenance.json",

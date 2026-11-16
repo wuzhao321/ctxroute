@@ -20,6 +20,10 @@ KINDS = {"model_api", "cloud_compute", "cloud_storage", "network"}
 class BudgetStopped(RuntimeError):
     """A request cannot be safely dispatched within the configured allowance."""
 
+    def __init__(self, message: str, *, layer: str = "budget_ledger") -> None:
+        super().__init__(message)
+        self.layer = layer
+
 
 @dataclass(frozen=True)
 class Snapshot:

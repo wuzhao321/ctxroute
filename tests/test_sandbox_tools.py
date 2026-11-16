@@ -10,7 +10,7 @@ from ctxroute.sandbox.fake import FakeSandbox
 from ctxroute.tools.mcp_server import build_server
 from ctxroute.tools.service import SandboxService
 
-TASK = Task("fixture", "repo", "commit", "issue")
+TASK = Task("fixture", "repo", "a" * 40, "issue")
 CONFIG: dict[str, Any] = json.loads(
     (Path(__file__).resolve().parents[1] / "configs/sandbox.json").read_text()
 )

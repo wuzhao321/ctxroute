@@ -16,7 +16,7 @@ import pytest
 from ctxroute.config import ArmConfig
 from ctxroute.domain import ModelRequest, ModelResponse, Observation, Task
 from ctxroute.evalkit.analysis import summarize_run
-from ctxroute.evalkit.campaign import create_plan, run_plan
+from ctxroute.evalkit.campaign import create_plan, digest, run_plan
 from ctxroute.evalkit.workflow import export, finalize, prepare
 from ctxroute.models.scripted import ScriptedModel
 from ctxroute.orchestrator.engine import Engine
@@ -80,8 +80,14 @@ class ToySandbox:
 
 def test_offline_full_chain_and_evidence_guards(tmp_path: Path) -> None:
     # The actual project, frozen split, budget and live flags are never modified.
-    for name in ("configs", "docs", "src"):
+    for name in ("configs", "docs", "src", "scripts"):
         shutil.copytree(ROOT / name, tmp_path / name)
+    shutil.copyfile(ROOT / "uv.lock", tmp_path / "uv.lock")
+    shutil.copyfile(ROOT / "pyproject.toml", tmp_path / "pyproject.toml")
+    budget_path = tmp_path / "configs/budget.json"
+    budget_config = json.loads(budget_path.read_text())
+    budget_config.pop("active_stage_config", None)
+    budget_path.write_text(json.dumps(budget_config))
     (tmp_path / "data").mkdir()
     shutil.copytree(ROOT / "data/prices", tmp_path / "data/prices")
     (tmp_path / "data/split.json").write_text(
@@ -107,7 +113,11 @@ def test_offline_full_chain_and_evidence_guards(tmp_path: Path) -> None:
         + "\n"
     )
     plan_path = tmp_path / "plan.json"
-    plan = create_plan(tmp_path, plan_path, arms=["A1", "A4"], count=1)
+    images = tmp_path / "images.json"
+    images.write_text(json.dumps({task.instance_id: "sha256:" + "a" * 64}))
+    plan = create_plan(
+        tmp_path, plan_path, arms=["A1", "A4"], count=1, tasks_path=tasks, images_path=images
+    )
     workflow = tmp_path / "workflow"
     prepare(tmp_path, plan_path, workflow)
     ledger = Ledger(
@@ -140,7 +150,7 @@ def test_offline_full_chain_and_evidence_guards(tmp_path: Path) -> None:
                 "kind": "agent_run",
                 "split": "dev",
                 "evidence_origin": "unit_test_fixture_not_benchmark",
-                "harness_version": None,
+                "harness_version": "test-fixture",
             },
         )
         sandboxes.append(sandbox)
@@ -167,12 +177,31 @@ def test_offline_full_chain_and_evidence_guards(tmp_path: Path) -> None:
     handoff = export(tmp_path, workflow)
     assert export(tmp_path, workflow) == handoff and not handoff["executed_harness"]
     assert len(handoff["cohorts"]) == 2
-    reports: dict[str, str] = {}
+    reports: dict[str, Any] = {}
     for run in runs:
         report = tmp_path / f"{run.name}-report-fixture.json"
         report.write_text(json.dumps({task.instance_id: {"resolved": True}}))
-        reports[run.name] = str(report.relative_to(tmp_path))
+        manifest = json.loads((run / "manifest.json").read_text())
+        cohort = f"{manifest['arm']}-{manifest['variant']}-{manifest['seed']}"
+        reports[run.name] = {
+            "report": str(report.relative_to(tmp_path)),
+            "receipt": {
+                "inference_run_id": run.name,
+                "instance_id": task.instance_id,
+                "predictions_sha256": handoff["run_prediction_hashes"][run.name],
+                "report_sha256": digest(report),
+                "harness_version": "test-fixture",
+                "grading_run_id": handoff["cohorts"][cohort]["grading_run_id"],
+            },
+        }
     mapping = tmp_path / "report-fixture-map.json"
+    original_grading_id = reports[runs[1].name]["receipt"]["grading_run_id"]
+    reports[runs[1].name]["receipt"]["grading_run_id"] = "another-grading-run"
+    mapping.write_text(json.dumps(reports))
+    with pytest.raises(ValueError, match="receipt"):
+        finalize(tmp_path, workflow, mapping, tmp_path / "wrong-grading-analysis")
+    assert all(not (run / "grade.json").exists() for run in runs)
+    reports[runs[1].name]["receipt"]["grading_run_id"] = original_grading_id
     mapping.write_text(json.dumps(reports))
     # Mismatched pre-existing grade must stop before importing another run's grade.
     bad_grade = runs[1] / "grade.json"

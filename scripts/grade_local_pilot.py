@@ -146,6 +146,8 @@ def main() -> None:
             )
             receipt = {
                 "inference_run_id": inference_id,
+                "instance_id": iid,
+                "predictions_sha256": handoff["run_prediction_hashes"][inference_id],
                 "grading_run_id": grading_id,
                 "prediction_sha256": entry["sha256"],
                 "official_image_id": image["image_id"],
@@ -159,9 +161,12 @@ def main() -> None:
                 "official_summary_sha256": digest(aggregate),
             }
             if receipt["report_available"]:
-                reports[inference_id] = str(report_path.relative_to(root))
                 receipt["resolved"] = result[1][iid]["resolved"]
                 receipt["report_sha256"] = digest(report_path)
+                reports[inference_id] = {
+                    "report": str(report_path.relative_to(root)),
+                    "receipt": receipt,
+                }
             else:
                 receipt["missing_reason"] = (
                     "empty_prediction"

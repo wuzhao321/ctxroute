@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from ctxroute.config import RouterConfig
 from ctxroute.domain import RunState, Tier
 
-CLASSIFIER_VERSION = "literal_cd_single_command_v2"
+CLASSIFIER_VERSION = "literal_read_pipeline_v3"
 
 
 def classify(command: str) -> str:
@@ -29,6 +29,11 @@ def classify(command: str) -> str:
         ):
             return "edit_or_unknown"
         command = rest.strip()
+    if " | " in command:
+        pipeline = command.split(" | ")
+        if 2 <= len(pipeline) <= 3 and all(classify(part) == "read" for part in pipeline):
+            return "read"
+        return "edit_or_unknown"
     if any(symbol in command for symbol in (";", "|", ">", "<", "`", "$", "\n", "&")):
         return "edit_or_unknown"
     try:

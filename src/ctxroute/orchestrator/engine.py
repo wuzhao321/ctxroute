@@ -9,7 +9,7 @@ from typing import Any
 
 from ctxroute.config import ArmConfig
 from ctxroute.context.artifacts import ArtifactStore, truncate
-from ctxroute.context.manager import ContextLimit, ContextManager, Memory
+from ctxroute.context.manager import Compression, ContextLimit, ContextManager, Memory
 from ctxroute.context.memory import MEMORY_SCHEMA, MEMORY_VERSION
 from ctxroute.domain import (
     Action,
@@ -24,6 +24,7 @@ from ctxroute.domain import (
 from ctxroute.models.base import Model, ModelFailure
 from ctxroute.models.deadline import suspension_aware_clock
 from ctxroute.orchestrator.action_recovery import without_prompt_echo
+from ctxroute.orchestrator.failure_recovery import FailureRecovery
 from ctxroute.orchestrator.progress import ProgressTracker
 from ctxroute.orchestrator.public_behavior import (
     STAGED_PATH,
@@ -32,7 +33,7 @@ from ctxroute.orchestrator.public_behavior import (
     stage_command,
 )
 from ctxroute.orchestrator.repair_policy import RepairPolicy, VerificationJob, selector_command
-from ctxroute.router.rules import CLASSIFIER_VERSION, RuleRouter, classify
+from ctxroute.router.rules import CLASSIFIER_VERSION, Decision, RuleRouter, classify
 from ctxroute.sandbox.base import Sandbox
 from ctxroute.tracing.budget import BudgetStopped
 from ctxroute.tracing.writer import RunWriter
@@ -69,6 +70,16 @@ SUMMARY_PROMPT = (
 
 
 def action_prompt(cfg: ArmConfig) -> str:
+    prompt = _action_prompt(cfg)
+    if cfg.context.can_recall:
+        prompt += (
+            ' You may also use {"tool":"recall","id":"...","start":0,"end":100}'
+            " (character offsets) as your single action, including during evidence recovery."
+        )
+    return prompt
+
+
+def _action_prompt(cfg: ArmConfig) -> str:
     if cfg.progress.evidence_action_strategy:
         establish = (
             f"First copy the public scaffold {STAGED_PATH} to {TARGET_PATH} and git add -N it. "
@@ -103,11 +114,6 @@ def action_prompt(cfg: ArmConfig) -> str:
             f" At most {cfg.context.fixed_max_facts} unique quotes, "
             f"each at most {cfg.context.fixed_quote_chars} characters; "
             "omit remember when unnecessary."
-        )
-    if cfg.context.mode != "none":
-        prompt += (
-            ' You may also use {"tool":"recall","id":"...","start":0,"end":100}'
-            " (character offsets)."
         )
     if cfg.progress.regression_strategy:
         prompt += (
@@ -225,6 +231,12 @@ class Engine:
         code = observation.exit_code
         if not observation.timed_out and not observation.output_limited:
             current_patch = self.sandbox.patch(handle)
+            (self.writer.path / "last-observed.patch").write_text(current_patch)
+            self.writer.manifest["last_observed_patch"] = {
+                "step": number,
+                "path": "last-observed.patch",
+                "sha256": hashlib.sha256(current_patch.encode()).hexdigest(),
+            }
             observed_patch = current_patch
             before_patch = progress.patch
             progress.observe(command, observation, current_patch, step=number)
@@ -295,6 +307,234 @@ class Engine:
             )
         return observed_patch
 
+    def _parse_action(
+        self,
+        text: str,
+        context: ContextManager,
+        history: list[Step],
+        event: dict[str, Any],
+        recovery: FailureRecovery | None,
+    ) -> Action:
+        """Validate a received action before any execution, with optional bounded recovery."""
+        if self.recover_action_metadata:
+            text, echo_removed = without_prompt_echo(text, context.progress)
+            event["action_recovery"] = {"exact_prompt_echo_removed": echo_removed}
+        action = Action.parse(text, recall_enabled=self.cfg.context.can_recall)
+        if recovery is not None:
+            recovery.validate_correction(action)
+        try:
+            context.remember(action.remember, history)
+        except ValueError as exc:
+            if not self.recover_action_metadata:
+                raise
+            # remember() validates atomically. Reject optional notes, preserving
+            # the schema-validated command text and its execution eligibility.
+            action = replace(action, remember=())
+            event["memory_validation_error"] = str(exc)
+            self.writer.append(
+                "lifecycle",
+                {
+                    "event": "optional_memory_rejected",
+                    "step": event["step"],
+                    "error_type": "invalid_remember",
+                },
+            )
+        if recovery is not None:
+            recovery.accepted_format()
+        return action
+
+    def _model_action(
+        self,
+        context: ContextManager,
+        state: RunState,
+        decision: Decision,
+        compression: Compression,
+        complete: Callable[[tuple[dict[str, str], ...], Tier, str], ModelResponse],
+        recovery: FailureRecovery | None,
+    ) -> tuple[Action | None, dict[str, Any]]:
+        """Request and audit one action; the run loop owns all retry and stop limits."""
+        messages = context.messages()
+        result = complete(messages, decision.tier, "action")
+        context.estimator.calibrate(
+            json.dumps(messages, ensure_ascii=False), result.usage.input_tokens
+        )
+        state.tier_history.append(decision.tier)
+        event: dict[str, Any] = {
+            "instance_id": state.task.instance_id,
+            "arm": self.cfg.arm,
+            "seed": state.seed,
+            "step": state.step,
+            "tier": decision.tier,
+            "model_id": result.model_id,
+            "prompt_tokens": result.usage.input_tokens,
+            "cached_tokens": result.usage.cached_tokens,
+            "completion_tokens": result.usage.output_tokens,
+            "latency_ms": result.latency_ms,
+            "ctx_tokens_before": compression.before,
+            "ctx_tokens_after": compression.after,
+            "compress_event": asdict(compression),
+            "router_decision": asdict(decision),
+            "router_features": {
+                "context_tokens": context.tokens(),
+                "step": state.step,
+                "recent_errors": sum(bool(s.error) for s in state.history[-3:]),
+                "previous_tier": state.history[-1].tier if state.history else None,
+            },
+            "model_response": result.text,
+            "response_format": "json_object",
+            "progress": dict(context.progress),
+            "command_classifier_version": CLASSIFIER_VERSION,
+            "cost_upper_usd": str(result.cost_upper),
+        }
+        try:
+            return self._parse_action(result.text, context, state.history, event, recovery), event
+        except ValueError as exc:
+            if recovery is not None:
+                recovery.reject_format(
+                    result.text, str(exc), recall_enabled=self.cfg.context.can_recall
+                )
+                event["failure_recovery"] = recovery.snapshot()
+            step = Step(
+                state.step,
+                decision.tier,
+                None,
+                f"Action not executed: {exc}. Correct the action format. "
+                'For bash use {"tool":"bash","command":"..."}; '
+                'for submission use {"tool":"submit"}. '
+                "Do not copy enclosing observation fields or add array brackets. "
+                "Omit optional remember notes while correcting the action. "
+                "Previously executed commands must not be replayed.",
+                error="format_error",
+            )
+            state.history.append(step)
+            context.append(step)
+            self.writer.append(
+                "traces",
+                {
+                    **event,
+                    "tool": None,
+                    "executed": False,
+                    "exit_code": None,
+                    "error_type": "format_error",
+                    "validation_error": str(exc),
+                },
+            )
+            return None, event
+
+    def _execute_action(
+        self,
+        action: Action,
+        event: dict[str, Any],
+        handle: str,
+        state: RunState,
+        decision: Decision,
+        context: ContextManager,
+        progress: ProgressTracker,
+        policy: RepairPolicy | None,
+        job: VerificationJob | None,
+        artifacts: ArtifactStore,
+        recovery: FailureRecovery | None,
+        task: Task,
+        deadline: float,
+    ) -> str | None:
+        number, limits = state.step, self.cfg.limits
+        observed_patch: str | None = None
+        if action.kind == "recall":
+            try:
+                output = artifacts.recall(action.artifact_id, action.start, action.end)
+                code, error, rpc = 0, None, 0.0
+            except (OSError, ValueError):
+                output, code, error, rpc = (
+                    "Invalid recall identifier or range",
+                    1,
+                    "recall_error",
+                    0.0,
+                )
+            artifact_id = None
+        else:
+            observation = self.sandbox.execute(
+                handle,
+                action.command,
+                min(limits.command_seconds, deadline - self.clock()),
+            )
+            artifact_id = artifacts.put(observation.output)
+            output = truncate(
+                observation.output, limits.output_head_chars, limits.output_tail_chars
+            )
+            output += f"\n[artifact_id={artifact_id}]"
+            code, rpc = observation.exit_code, observation.rpc_ms
+            error = (
+                "command_timeout"
+                if observation.timed_out
+                else (
+                    "output_limit"
+                    if observation.output_limited
+                    else ("tool_error" if code else None)
+                )
+            )
+            # Even failed commands can edit files. Observe the actual diff;
+            # classification is only a heuristic, never proof of no changes.
+            before_patch = progress.patch
+            observed_patch = self._observe_command(
+                handle,
+                action.command,
+                observation,
+                output,
+                number,
+                progress,
+                context,
+                policy,
+                job,
+                artifacts,
+                task.base_commit,
+                deadline,
+            )
+            if recovery is not None and observed_patch is not None:
+                recovery.observe(
+                    action.command,
+                    observation,
+                    before_patch,
+                    observed_patch,
+                    number,
+                    model_action=job is None,
+                )
+                event["failure_recovery"] = recovery.snapshot()
+        step = Step(number, decision.tier, action, output, code, error, artifact_id)
+        state.history.append(step)
+        context.append(step)
+        self.writer.append(
+            "traces",
+            {
+                **event,
+                "tool": action.kind,
+                "command": action.command if action.kind == "bash" else None,
+                "command_class": classify(action.command) if action.kind == "bash" else None,
+                "executed": True,
+                "exit_code": code,
+                "error_type": error,
+                "artifact_id": artifact_id,
+                "rpc_roundtrip_ms": rpc,
+                "patch_present_after": bool(observed_patch.strip())
+                if observed_patch is not None
+                else None,
+                "patch_sha256_after": hashlib.sha256(observed_patch.encode()).hexdigest()
+                if observed_patch is not None
+                else None,
+                "edit_progress": progress.edit_metrics(),
+                "source_edit_progress": policy.source.status(
+                    progress.patch, [c.record() for c in policy.unresolved.values()]
+                )
+                if policy and policy.source
+                else None,
+                "check_evidence": progress.last_check.record()
+                if action.kind == "bash" and observed_patch is not None and progress.last_check
+                else None,
+                "local_test_status_after": progress.verification,
+                "verification_category": job.category if job is not None else "diagnostic",
+            },
+        )
+        return error
+
     def run(self, task: Task, seed: int) -> RunResult:
         cfg, limits = self.cfg, self.cfg.limits
         state = RunState(str(self.writer.manifest["run_id"]), task, cfg.arm, seed)
@@ -314,6 +554,11 @@ class Engine:
         )
         router = RuleRouter(cfg.router)
         progress = ProgressTracker(cfg.progress)
+        recovery = (
+            FailureRecovery(limits.output_head_chars + limits.output_tail_chars)
+            if cfg.progress.failure_recovery_strategy
+            else None
+        )
         policy = (
             RepairPolicy(
                 cfg.progress,
@@ -343,6 +588,8 @@ class Engine:
                     next_action=advice["next_action"],
                     validation_policy=json.dumps(advice, ensure_ascii=False),
                 )
+            if recovery is not None:
+                status.update(recovery.guidance(progress.patch))
             return status
 
         def complete(
@@ -353,7 +600,9 @@ class Engine:
                 if remaining <= 0:
                     raise TimeoutError("Run deadline reached")
                 if state.accounted_cost >= limits.budget:
-                    raise BudgetStopped("Task cost allowance exhausted")
+                    raise BudgetStopped(
+                        "Task cost allowance exhausted", layer="execution_cost_bound"
+                    )
                 request = ModelRequest(
                     messages,
                     tier,
@@ -369,7 +618,10 @@ class Engine:
                     answer = self.model.complete(request)
                     state.accounted_cost += answer.cost_upper
                     if state.accounted_cost > limits.budget:
-                        raise BudgetStopped("Model reported cost beyond task allowance")
+                        raise BudgetStopped(
+                            "Model reported cost beyond task allowance",
+                            layer="execution_cost_bound",
+                        )
                     if self.clock() >= deadline:
                         raise TimeoutError("Model exceeded remaining run time")
                     return answer
@@ -458,6 +710,10 @@ class Engine:
                     )
                     break
                 # Compression consumes time and budget too; refresh before the action.
+                if compression.triggered:
+                    self.writer.append(
+                        "lifecycle", {"event": "compression", "step": number, **asdict(compression)}
+                    )
                 context.progress = run_status(number)
                 if context.tokens() > cfg.context.budget_tokens:
                     raise ContextLimit("Context including run status exceeds budget")
@@ -473,97 +729,19 @@ class Engine:
                         "step": number,
                         "tier": decision.tier,
                         "origin": "automatic_verification",
+                        "ctx_tokens_before": compression.before,
+                        "ctx_tokens_after": compression.after,
+                        "compress_event": asdict(compression),
                         "progress": dict(context.progress),
                         "cost_upper_usd": "0",
                         "command_classifier_version": CLASSIFIER_VERSION,
                     }
                 else:
-                    messages = context.messages()
-                    result = complete(messages, decision.tier, "action")
-                    context.estimator.calibrate(
-                        json.dumps(messages, ensure_ascii=False), result.usage.input_tokens
+                    action, event = self._model_action(
+                        context, state, decision, compression, complete, recovery
                     )
-                    state.tier_history.append(decision.tier)
-                    event = {
-                        "instance_id": task.instance_id,
-                        "arm": cfg.arm,
-                        "seed": seed,
-                        "step": number,
-                        "tier": decision.tier,
-                        "model_id": result.model_id,
-                        "prompt_tokens": result.usage.input_tokens,
-                        "cached_tokens": result.usage.cached_tokens,
-                        "completion_tokens": result.usage.output_tokens,
-                        "latency_ms": result.latency_ms,
-                        "ctx_tokens_before": compression.before,
-                        "ctx_tokens_after": compression.after,
-                        "compress_event": asdict(compression),
-                        "router_decision": asdict(decision),
-                        "router_features": {
-                            "context_tokens": context.tokens(),
-                            "step": state.step,
-                            "recent_errors": sum(bool(s.error) for s in state.history[-3:]),
-                            "previous_tier": state.history[-1].tier if state.history else None,
-                        },
-                        "model_response": result.text,
-                        "response_format": "json_object",
-                        "progress": dict(context.progress),
-                        "command_classifier_version": CLASSIFIER_VERSION,
-                        "cost_upper_usd": str(result.cost_upper),
-                    }
-                    try:
-                        action_text = result.text
-                        if self.recover_action_metadata:
-                            action_text, echo_removed = without_prompt_echo(
-                                action_text, context.progress
-                            )
-                            event["action_recovery"] = {"exact_prompt_echo_removed": echo_removed}
-                        action = Action.parse(
-                            action_text, recall_enabled=cfg.context.mode != "none"
-                        )
-                        try:
-                            context.remember(action.remember, state.history)
-                        except ValueError as exc:
-                            if not self.recover_action_metadata:
-                                raise
-                            # remember() validates atomically. Reject all optional notes, while
-                            # retaining the schema-validated command without changing its text.
-                            action = replace(action, remember=())
-                            event["memory_validation_error"] = str(exc)
-                            self.writer.append(
-                                "lifecycle",
-                                {
-                                    "event": "optional_memory_rejected",
-                                    "step": number,
-                                    "error_type": "invalid_remember",
-                                },
-                            )
-                    except ValueError as exc:
+                    if action is None:
                         format_failures += 1
-                        step = Step(
-                            number,
-                            decision.tier,
-                            None,
-                            f"Action not executed: {exc}. Correct the action format. "
-                            'For bash use {"tool":"bash","command":"..."}; '
-                            'for submission use {"tool":"submit"}. '
-                            "Do not copy enclosing observation fields or add array brackets. "
-                            "Omit optional remember notes while correcting the action. "
-                            "Previously executed commands must not be replayed.",
-                            error="format_error",
-                        )
-                        state.history.append(step)
-                        context.append(step)
-                        self.writer.append(
-                            "traces",
-                            {
-                                **event,
-                                "tool": None,
-                                "exit_code": None,
-                                "error_type": "format_error",
-                                "validation_error": str(exc),
-                            },
-                        )
                         if format_failures >= limits.format_attempts:
                             state.termination = "format_failure"
                             break
@@ -600,6 +778,36 @@ class Engine:
                     )
                     state.termination = "submitted"
                     break
+                if job is None and recovery is not None and recovery.blocks(action, progress.patch):
+                    step = Step(
+                        number,
+                        decision.tier,
+                        action,
+                        "Command not executed: this exact diagnostic already failed with a "
+                        "Python argument-binding error. Correct the call or inspect its "
+                        "signature; repeating it cannot provide new behavior evidence.",
+                        error="invocation_replay_blocked",
+                    )
+                    state.history.append(step)
+                    context.append(step)
+                    if policy is not None:
+                        policy.reject_action(action.command, number)
+                    self.writer.append(
+                        "traces",
+                        {
+                            **event,
+                            "tool": "bash",
+                            "command": action.command,
+                            "executed": False,
+                            "exit_code": None,
+                            "error_type": "invocation_replay_blocked",
+                            "failure_recovery": recovery.snapshot(),
+                        },
+                    )
+                    if recovery.blocked_repeats >= cfg.progress.max_blocked_repeats:
+                        state.termination = "stagnation"
+                        break
+                    continue
                 if progress.blocks(action):
                     step = Step(
                         number,
@@ -630,93 +838,20 @@ class Engine:
                     continue
                 if self.clock() >= deadline:
                     raise TimeoutError("No remaining time for tools")
-                observed_patch: str | None = None
-                if action.kind == "recall":
-                    try:
-                        output = artifacts.recall(action.artifact_id, action.start, action.end)
-                        code, error, rpc = 0, None, 0.0
-                    except (OSError, ValueError):
-                        output, code, error, rpc = (
-                            "Invalid recall identifier or range",
-                            1,
-                            "recall_error",
-                            0.0,
-                        )
-                    artifact_id = None
-                else:
-                    observation = self.sandbox.execute(
-                        handle,
-                        action.command,
-                        min(limits.command_seconds, deadline - self.clock()),
-                    )
-                    artifact_id = artifacts.put(observation.output)
-                    output = truncate(
-                        observation.output, limits.output_head_chars, limits.output_tail_chars
-                    )
-                    output += f"\n[artifact_id={artifact_id}]"
-                    code, rpc = observation.exit_code, observation.rpc_ms
-                    error = (
-                        "command_timeout"
-                        if observation.timed_out
-                        else (
-                            "output_limit"
-                            if observation.output_limited
-                            else ("tool_error" if code else None)
-                        )
-                    )
-                    # Even failed commands can edit files. Observe the actual diff;
-                    # classification is only a heuristic, never proof of no changes.
-                    observed_patch = self._observe_command(
-                        handle,
-                        action.command,
-                        observation,
-                        output,
-                        number,
-                        progress,
-                        context,
-                        policy,
-                        job,
-                        artifacts,
-                        task.base_commit,
-                        deadline,
-                    )
-                step = Step(number, decision.tier, action, output, code, error, artifact_id)
-                state.history.append(step)
-                context.append(step)
-                self.writer.append(
-                    "traces",
-                    {
-                        **event,
-                        "tool": action.kind,
-                        "command": action.command if action.kind == "bash" else None,
-                        "command_class": classify(action.command)
-                        if action.kind == "bash"
-                        else None,
-                        "executed": True,
-                        "exit_code": code,
-                        "error_type": error,
-                        "artifact_id": artifact_id,
-                        "rpc_roundtrip_ms": rpc,
-                        "patch_present_after": bool(observed_patch.strip())
-                        if observed_patch is not None
-                        else None,
-                        "patch_sha256_after": hashlib.sha256(observed_patch.encode()).hexdigest()
-                        if observed_patch is not None
-                        else None,
-                        "edit_progress": progress.edit_metrics(),
-                        "source_edit_progress": policy.source.status(
-                            progress.patch, [c.record() for c in policy.unresolved.values()]
-                        )
-                        if policy and policy.source
-                        else None,
-                        "check_evidence": progress.last_check.record()
-                        if action.kind == "bash"
-                        and observed_patch is not None
-                        and progress.last_check
-                        else None,
-                        "local_test_status_after": progress.verification,
-                        "verification_category": job.category if job is not None else "diagnostic",
-                    },
+                error = self._execute_action(
+                    action,
+                    event,
+                    handle,
+                    state,
+                    decision,
+                    context,
+                    progress,
+                    policy,
+                    job,
+                    artifacts,
+                    recovery,
+                    task,
+                    deadline,
                 )
                 if error in {"command_timeout", "output_limit"}:
                     state.termination = error
@@ -726,30 +861,53 @@ class Engine:
                     break
             if state.termination is None:
                 state.termination = "step_limit"
-        except BudgetStopped:
+        except BudgetStopped as exc:
             state.termination = "budget_limit"
-        except ContextLimit:
+            self.writer.append(
+                "lifecycle", {"event": "termination_reason", "layer": exc.layer, "reason": str(exc)}
+            )
+        except ContextLimit as exc:
             state.termination = "context_limit"
+            self.writer.append(
+                "lifecycle", {"event": "termination_reason", "layer": "context", "reason": str(exc)}
+            )
         except TimeoutError:
             state.termination = "wall_timeout"
-        except ModelFailure:
+        except ModelFailure as exc:
             state.termination = "model_failure"
+            self.writer.append(
+                "lifecycle",
+                {
+                    "event": "termination_reason",
+                    "layer": "model_gateway",
+                    "reason": str(exc),
+                },
+            )
         except Exception as exc:
             state.termination = "execution_error"
             self.writer.append(
                 "lifecycle", {"event": "execution_error", "type": type(exc).__name__}
             )
         finally:
+            self.writer.manifest.update(
+                primary_termination=state.termination or "execution_error",
+                cleanup_status="not_created",
+                patch_export_status="not_created",
+            )
             if handle is not None:
                 try:
                     patch = self.sandbox.patch(handle)
+                    self.writer.manifest["patch_export_status"] = "complete"
                 except Exception:
+                    self.writer.manifest["patch_export_status"] = "failed"
                     self.writer.append("lifecycle", {"event": "patch_export_failed"})
                     if state.termination == "submitted":
                         state.termination = "patch_export_failed"
                 try:
                     self.sandbox.destroy(handle)
+                    self.writer.manifest["cleanup_status"] = "complete"
                 except Exception:
+                    self.writer.manifest["cleanup_status"] = "failed"
                     self.writer.append("lifecycle", {"event": "cleanup_failed", "handle": handle})
                     state.termination = "cleanup_failed"
             self.writer.manifest.update(
@@ -785,6 +943,7 @@ class Engine:
                     )
                     if policy is not None
                     else None,
+                    "failure_recovery": recovery.snapshot() if recovery is not None else None,
                 },
             )
             self.writer.finish(

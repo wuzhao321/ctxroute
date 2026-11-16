@@ -123,7 +123,10 @@ class ContextManager:
         """Show accepted actions as standalone protocol objects, never array entries."""
         status = dict(self.progress)
         fixed = dict(self.fixed)
-        if self.execution_efficiency:
+        if self.execution_efficiency or status.get("next_priority") in {
+            "recover_action_format",
+            "correct_invocation",
+        }:
             # Guidance remains once at the end; retain every actual action and
             # observation and the same token/time/format boundaries.
             status.pop("next_action", None)
@@ -158,7 +161,7 @@ class ContextManager:
                 payload.pop("remember", None)
                 label = (
                     "REJECTED ACTION"
-                    if step.error == "repeated_action_blocked"
+                    if step.error in {"repeated_action_blocked", "invocation_replay_blocked"}
                     else "EXECUTED ACTION"
                 )
                 blocks.append(
@@ -173,7 +176,11 @@ class ContextManager:
                 )
             )
         guidance = str(self.progress.get("next_action", "Choose the next useful action."))
-        if recent and recent[-1].error == "format_error":
+        if (
+            recent
+            and recent[-1].error == "format_error"
+            and self.progress.get("next_priority") != "recover_action_format"
+        ):
             guidance = (
                 "FORMAT CORRECTION FIRST: the last proposed action was NOT executed. "
                 "Return its corrected single action object, or another useful valid action. "
