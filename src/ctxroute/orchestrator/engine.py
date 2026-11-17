@@ -21,6 +21,7 @@ from ctxroute.domain import (
     Task,
     Tier,
 )
+from ctxroute.evalkit.compression_replay import capture_point
 from ctxroute.models.base import Model, ModelFailure
 from ctxroute.models.deadline import suspension_aware_clock
 from ctxroute.orchestrator.action_recovery import without_prompt_echo
@@ -354,6 +355,21 @@ class Engine:
     ) -> tuple[Action | None, dict[str, Any]]:
         """Request and audit one action; the run loop owns all retry and stop limits."""
         messages = context.messages()
+        if compression.accepted:
+            try:
+                snapshot = self.writer.private_snapshot(
+                    "compression_points", f"step-{state.step:04d}", capture_point(context, state)
+                )
+                if not snapshot["replayable"]:
+                    raise ValueError("Compression point contains redacted data")
+                self.writer.append(
+                    "lifecycle",
+                    {"event": "compression_point", "step": state.step, "snapshot": snapshot},
+                )
+            except (OSError, ValueError):
+                raise ModelFailure(
+                    "Compression evidence unavailable; action not dispatched"
+                ) from None
         result = complete(messages, decision.tier, "action")
         context.estimator.calibrate(
             json.dumps(messages, ensure_ascii=False), result.usage.input_tokens
@@ -712,7 +728,16 @@ class Engine:
                 # Compression consumes time and budget too; refresh before the action.
                 if compression.triggered:
                     self.writer.append(
-                        "lifecycle", {"event": "compression", "step": number, **asdict(compression)}
+                        "lifecycle",
+                        {
+                            "event": "compression",
+                            "step": number,
+                            **asdict(compression),
+                            "accepted_memory": asdict(context.memory)
+                            if compression.accepted
+                            else None,
+                            "retained_step_numbers": [step.number for step in context.recent],
+                        },
                     )
                 context.progress = run_status(number)
                 if context.tokens() > cfg.context.budget_tokens:

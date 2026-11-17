@@ -1,6 +1,7 @@
 """Optional PydanticAI transport for the same budgeted DeepSeekModel boundary."""
 
 import asyncio
+import json
 from collections.abc import AsyncIterator
 from importlib import import_module
 from typing import Any
@@ -46,6 +47,7 @@ def pydantic_transport(payload: dict[str, Any], key: str, timeout: int) -> dict[
         async def observe_response(response: Any) -> None:
             wire.observe_response(response.status_code, response.headers)
             original_bytes = response.aiter_bytes
+            body: list[bytes] = []
 
             def observe(chunk: bytes) -> None:
                 wire.observe_chunk(len(chunk))
@@ -57,11 +59,22 @@ def pydantic_transport(payload: dict[str, Any], key: str, timeout: int) -> dict[
                     wire.sse_keepalives = tracker.keepalives
                     wire.sse_done = tracker.done
                     wire.stream_terminal = tracker.terminal_fields()
+                else:
+                    body.append(chunk)
+
+            def completed() -> None:
+                wire.response_completed = True
+                if not streaming:
+                    try:
+                        raw = json.loads(b"".join(body))
+                    except (ValueError, UnicodeError):
+                        return  # SDK validation still owns malformed-response handling.
+                    wire.output_audit.capture_response(raw)
 
             if response.is_stream_consumed:
                 # Mock/cached responses have already been decoded by HTTPX.
                 observe(response.content)
-                wire.response_completed = True
+                completed()
                 return
 
             async def measured_bytes(chunk_size: int | None = None) -> AsyncIterator[bytes]:
@@ -70,7 +83,7 @@ def pydantic_transport(payload: dict[str, Any], key: str, timeout: int) -> dict[
                 async for chunk in original_bytes(chunk_size):
                     observe(chunk)
                     yield chunk
-                wire.response_completed = True
+                completed()
 
             response.aiter_bytes = measured_bytes
 

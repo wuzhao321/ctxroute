@@ -70,6 +70,14 @@ def test_compression_calls_cheap_layer_with_same_task_budget(tmp_path: Path) -> 
         json.loads(line) for line in (output.path / "lifecycle.jsonl").read_text().splitlines()
     ]
     assert any(item.get("event") == "compression" and item["accepted"] for item in lifecycle)
+    accepted = [
+        item for item in lifecycle if item.get("event") == "compression" and item["accepted"]
+    ]
+    assert all(
+        item["accepted_memory"]["open_questions"] == ["Synthetic compression fixture"]
+        for item in accepted
+    )
+    assert all(len(item["retained_step_numbers"]) == cfg.context.recent_steps for item in accepted)
 
 
 def test_format_failure_cleanup_and_corrective_feedback(tmp_path: Path) -> None:

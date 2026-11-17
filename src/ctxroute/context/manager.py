@@ -212,6 +212,13 @@ class ContextManager:
             {"role": "user", "content": self._user_text(self.memory, self.recent)},
         )
 
+    def full_history_messages(self, history: list[Step]) -> tuple[dict[str, str], ...]:
+        """Render the same envelope with full history and no summary memory, without mutation."""
+        return (
+            {"role": "system", "content": self.system},
+            {"role": "user", "content": self._user_text(Memory(), history)},
+        )
+
     def serialized(self) -> str:
         return json.dumps(self.messages(), ensure_ascii=False)
 

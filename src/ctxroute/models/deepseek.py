@@ -38,6 +38,7 @@ class DeepSeekModel:
             raise ValueError("Invalid model settings")
         self.key, self.prices, self.ledger = key, prices, ledger
         self.writer, self.input_guard, self.thinking = writer, input_guard_tokens, thinking
+        self.writer.protect_secret(key)
         if type(stream) is not bool or (stream and transport is http_transport):
             raise ValueError("Streaming requires a streaming-capable transport")
         self.transport, self.stream = transport, stream
@@ -49,6 +50,39 @@ class DeepSeekModel:
         peak = price_from(model["peak"])
         bound = self.ledger.reservation_bound(request, peak, self.input_guard)
         request_id = uuid4().hex
+        payload = {
+            "model": model["model_id"],
+            "messages": list(request.messages),
+            "max_tokens": request.max_output_tokens,
+            "temperature": 0,
+            "thinking": {"type": self.thinking},
+            "stream": self.stream,
+        }
+        if request.response_format == "json_object":
+            payload["response_format"] = {"type": "json_object"}
+        serialized = json.dumps(payload, ensure_ascii=False)
+        key_text = json.dumps(self.key, ensure_ascii=False)[1:-1]
+        redacted = serialized.replace(key_text, "[REDACTED]") if key_text else serialized
+        try:
+            snapshot = self.writer.request_snapshot(
+                request_id,
+                {
+                    "schema": 1,
+                    "kind": "logical_transport_request",
+                    "phase": "prepared_before_reservation",
+                    "run_id": request.run_id,
+                    "request_id": request_id,
+                    "step": request.step,
+                    "purpose": request.purpose,
+                    "tier": request.tier,
+                    "timeout_seconds": max(1, int(request.timeout_seconds)),
+                    "scope_limit_usd": str(request.scope_limit),
+                    "payload": json.loads(redacted),
+                    "replayable": redacted == serialized,
+                },
+            )
+        except (OSError, ValueError):
+            raise ModelFailure("Request audit unavailable; no request dispatched") from None
         self.ledger.reserve(
             request_id,
             bound,
@@ -73,22 +107,15 @@ class DeepSeekModel:
                 "price_date": self.prices["retrieved_on"],
                 "price_source": self.prices["source"],
                 "currency": "USD",
+                "request_snapshot": snapshot,
             },
         )
-        payload = {
-            "model": model["model_id"],
-            "messages": list(request.messages),
-            "max_tokens": request.max_output_tokens,
-            "temperature": 0,
-            "thinking": {"type": self.thinking},
-            "stream": self.stream,
-        }
-        if request.response_format == "json_object":
-            payload["response_format"] = {"type": "json_object"}
         wire = WireMetadata()
         token = active_wire.set(wire)
         try:
             raw = self.transport(payload, self.key, max(1, int(request.timeout_seconds)))
+            if not wire.streaming:
+                wire.output_audit.capture_response(raw)
             usage = normalize_usage(raw)
             upper = peak.cost(usage)
             ended = datetime.now(UTC)
@@ -164,7 +191,8 @@ class DeepSeekModel:
                 # Preserve partial/length outputs even when no ModelResponse is delivered.
                 # Diagnostic evidence cannot bypass the finish/usage/schema gates.
                 folder = self.writer.path / "response_audits"
-                folder.mkdir(exist_ok=True)
+                folder.mkdir(mode=0o700, exist_ok=True)
+                folder.chmod(0o700)
                 data = json.dumps(wire.output_audit.record(self.key), ensure_ascii=False).encode()
                 used = sum(p.stat().st_size for p in folder.glob("*.json"))
                 saved = used + len(data) <= 8_388_608
