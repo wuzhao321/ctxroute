@@ -111,6 +111,17 @@ class StageBudget:
         data.pop("paid_execution_enabled")
         return json.dumps(data, default=str, sort_keys=True)
 
+    def reservation_bound(
+        self, request: ModelRequest, price: Price, input_guard_tokens: int
+    ) -> Decimal:
+        size = len(json.dumps(request.messages, ensure_ascii=True).encode("ascii"))
+        guard = max(
+            input_guard_tokens,
+            self.input_floor,
+            self.input_byte_multiplier * size + self.input_margin,
+        )
+        return price.cost(Usage(guard, 0, max(request.max_output_tokens, self.output_floor)))
+
 
 class StageLedger(Ledger):
     """One durable USD ledger per stage, with atomic CNY allocation enforcement."""
@@ -155,13 +166,7 @@ class StageLedger(Ledger):
     def reservation_bound(
         self, request: ModelRequest, price: Price, input_guard_tokens: int
     ) -> Decimal:
-        size = len(json.dumps(request.messages, ensure_ascii=True).encode("ascii"))
-        guard = max(
-            input_guard_tokens,
-            self.policy.input_floor,
-            self.policy.input_byte_multiplier * size + self.policy.input_margin,
-        )
-        return price.cost(Usage(guard, 0, max(request.max_output_tokens, self.policy.output_floor)))
+        return self.policy.reservation_bound(request, price, input_guard_tokens)
 
     def _check_allocation(
         self, conn: sqlite3.Connection, amount: Decimal, scope: str | None

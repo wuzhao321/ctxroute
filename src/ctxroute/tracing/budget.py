@@ -122,6 +122,10 @@ class Ledger:
     ) -> None:
         """Optional pool checks, within the same transaction as the reservation."""
 
+    def request_failed(self, request_id: str) -> bool:
+        """Opt-in persistent stop policy; legacy holds and retry behavior are unchanged."""
+        return False
+
     def freeze(self, request_id: str, revised_upper_bound: Decimal) -> None:
         """Keep an uncertain charge reserved and block after a bound violation."""
         amount = money(revised_upper_bound)

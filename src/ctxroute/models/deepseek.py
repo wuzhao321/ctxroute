@@ -92,27 +92,27 @@ class DeepSeekModel:
         )
         started = datetime.now(UTC)
         timer = time.monotonic()
-        self.writer.append(
-            "requests",
-            {
-                "request_id": request_id,
-                "step": request.step,
-                "purpose": request.purpose,
-                "response_format": request.response_format,
-                "tier": request.tier,
-                "model_id": model["model_id"],
-                "event": "reserved",
-                "reserved_usd": str(bound),
-                "started_at": started.isoformat(),
-                "price_date": self.prices["retrieved_on"],
-                "price_source": self.prices["source"],
-                "currency": "USD",
-                "request_snapshot": snapshot,
-            },
-        )
         wire = WireMetadata()
         token = active_wire.set(wire)
         try:
+            self.writer.append(
+                "requests",
+                {
+                    "request_id": request_id,
+                    "step": request.step,
+                    "purpose": request.purpose,
+                    "response_format": request.response_format,
+                    "tier": request.tier,
+                    "model_id": model["model_id"],
+                    "event": "reserved",
+                    "reserved_usd": str(bound),
+                    "started_at": started.isoformat(),
+                    "price_date": self.prices["retrieved_on"],
+                    "price_source": self.prices["source"],
+                    "currency": "USD",
+                    "request_snapshot": snapshot,
+                },
+            )
             raw = self.transport(payload, self.key, max(1, int(request.timeout_seconds)))
             if not wire.streaming:
                 wire.output_audit.capture_response(raw)
@@ -162,7 +162,10 @@ class DeepSeekModel:
             return ModelResponse(
                 text.replace(self.key, "[REDACTED]"), model["model_id"], usage, elapsed, upper
             )
-        except Exception as exc:
+        except BaseException as exc:
+            stop = self.ledger.request_failed(request_id)
+            if not isinstance(exc, Exception):
+                raise
             diagnostics = wire.failure_fields(exc, self.key, list(request.messages))
             self.writer.append(
                 "requests",
@@ -179,7 +182,8 @@ class DeepSeekModel:
             )
             raise ModelFailure(
                 "Model request failed; inspect numeric usage and reservations",
-                retryable=diagnostics["failure_kind"] != "diagnostic_capture_failed"
+                retryable=not stop
+                and diagnostics["failure_kind"] != "diagnostic_capture_failed"
                 and (
                     diagnostics["failure_kind"]
                     in {"connection_error", "timeout", "incomplete_stream", "rate_limit"}
