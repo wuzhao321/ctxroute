@@ -305,3 +305,38 @@ def test_explicit_loader_requires_both_execution_flags(
         reserve(book, "still-off", D(".3"))
     book = open_two_phase_ledger(tmp_path, path, enabled=True)
     reserve(book, "explicit-local-transport-test", D(".3"))
+
+
+def test_explicit_independent_pool_preserves_history_and_original_reservation(
+    tmp_path: Path, policy: TwoPhaseBudget
+) -> None:
+    old = StageLedger(tmp_path / policy.parent.ledger, policy.parent, enabled=True)
+    old.bind_scope("previous-replay", "validation")
+    for index in range(2):
+        old.reserve(
+            f"previous-{index}",
+            D(".7"),
+            "model_api",
+            scope="previous-replay",
+            scope_limit=D(2),
+        )
+    before = old.path.read_bytes()
+    independent = replace(
+        policy,
+        parent_sha256=hashlib.sha256(before).hexdigest(),
+        independent_pool=True,
+        replay_cny=D("30.45"),
+    )
+    book = TwoPhaseLedger(tmp_path, independent, enabled=True)
+    for index in range(6):
+        reserve(book, f"replay-{index}", independent.parent.usd_cap(D(5)), "replay")
+        book.settle(f"replay-{index}", independent.parent.usd_cap(D(5)))
+    assert book.snapshot().spent * 7 <= 30
+    with pytest.raises(BudgetStopped, match="replay cap"):
+        reserve(book, "over-replay", D(".1"), "replay")
+    assert book.reservation_bound(request(), PEAK, 32000) == D(".30176256")
+    assert old.path.read_bytes() == before
+    assert independent.identity() != replace(independent, independent_pool=False).identity()
+    old.settle("unknown", D(".01"))
+    with pytest.raises(BudgetStopped, match="changed"):
+        reserve(book, "changed-history", D(".01"))

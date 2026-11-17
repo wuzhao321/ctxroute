@@ -28,6 +28,7 @@ class TwoPhaseBudget:
     collector_lane: str
     replay_lane: str
     paid_execution_enabled: bool = False
+    independent_pool: bool = False
 
     def __post_init__(self) -> None:
         if not self.experiment_id or not self.ledger:
@@ -36,6 +37,7 @@ class TwoPhaseBudget:
             len(self.parent_sha256) != 64
             or any(c not in "0123456789abcdef" for c in self.parent_sha256)
             or type(self.paid_execution_enabled) is not bool
+            or type(self.independent_pool) is not bool
         ):
             raise ValueError("Invalid frozen parent hash or execution flag")
         for phase, cap in self.allocations().items():
@@ -57,6 +59,7 @@ class TwoPhaseBudget:
             collector_lane=raw["collector_lane"],
             replay_lane=raw["replay_lane"],
             paid_execution_enabled=raw["paid_execution_enabled"],
+            independent_pool=raw.get("independent_pool", False),
         )
 
     def allocations(self) -> dict[str, Decimal]:
@@ -77,6 +80,7 @@ class TwoPhaseBudget:
                 "parent_sha256": self.parent_sha256,
                 "caps_cny": self.allocations(),
                 "lanes": {p: self.lane(p) for p in self.allocations()},
+                **({"independent_pool": True} if self.independent_pool else {}),
             },
             default=str,
             sort_keys=True,
@@ -194,6 +198,10 @@ class TwoPhaseLedger(Ledger):
         if occupied[phase] > self.policy.phase_cap(phase):
             raise BudgetStopped(f"Two-phase {phase} cap exceeded including reservations")
         parent_total, parent_lanes = self._parent_state()
+        if self.policy.independent_pool:
+            # Explicit new-pool authorization excludes historical costs. The old
+            # book is still pinned/read-only; only this pool's caps fund requests.
+            return
         total = parent_total + sum(occupied.values(), Decimal(0))
         if total > self.policy.parent.usd_cap(self.policy.parent.hard_cny):
             raise BudgetStopped("Parent stage hard limit exceeded including annex")
