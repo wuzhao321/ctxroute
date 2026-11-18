@@ -289,8 +289,10 @@ class Engine:
         reported_failure = progress.reported_check_step == number
         check = progress.last_check if observed_patch is not None else None
         check_failure = check is not None and check.outcome == "failed"
-        if check_failure or (classify(command) == "test" and code) or reported_failure:
-            context.fixed["last_failed_test"] = json.dumps(
+        check_not_run = check is not None and check.outcome == "not_run"
+        if check_not_run or check_failure or reported_failure:
+            key = "last_test_not_run" if check_not_run else "last_failed_test"
+            context.fixed[key] = json.dumps(
                 {
                     "step": number,
                     "command": command,
@@ -302,7 +304,9 @@ class Engine:
                     "patch_sha256_after": hashlib.sha256(observed_patch.encode()).hexdigest()
                     if observed_patch is not None
                     else None,
-                    "meaning": "historical_failure_may_be_stale_after_edits",
+                    "meaning": "historical_unexecuted_test_may_be_stale_after_edits"
+                    if check_not_run
+                    else "historical_failure_may_be_stale_after_edits",
                     "observation": output,
                 }
             )

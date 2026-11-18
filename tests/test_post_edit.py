@@ -71,10 +71,13 @@ def test_collection_error_is_not_guidance_to_blindly_change_the_patch() -> None:
         "pytest tests", Observation("ERROR collecting: missing dependency", 2), "+fix\n"
     )
     current = status(tracker)
-    assert current["local_test_status"] == "failed"
-    assert current["next_priority"] == "repair_patch"
-    assert "collection or environment errors" in str(current["next_action"])
-    assert "not proof" in str(current["next_action"])
+    assert current["local_test_status"] == "not_run" and not current["local_test_patch_sha256"]
+    assert current["next_priority"] == "verify_patch"
+    assert "collection stopped" in str(current["next_action"])
+    assert "pytest tests" in str(current["next_action"])
+    check = tracker.last_check
+    assert check and check.attribution == "collection_error"
+    assert check.exit_code == 2 and check.test_exit_code is None
 
 
 class RegressionSandbox(FakeSandbox):

@@ -28,9 +28,26 @@ class CheckEvidence:
     patch_sha256_before: str
     patch_sha256_after: str
     step: int
+    diagnostic: str = ""
 
     def record(self) -> dict[str, Any]:
-        return asdict(self)
+        record = asdict(self)
+        if not self.diagnostic:
+            record.pop("diagnostic")
+        return record
+
+    def unexecuted_guidance(self) -> tuple[str, str]:
+        detail = f"Step {self.step}, {self.command!r}: {self.diagnostic} "
+        if self.attribution == "runner_unavailable":
+            return "restore_test_environment", detail + (
+                "Keep the current diff. Check the repository's documented test runner and run "
+                "the same target if possible. Record that result separately. Rerun the recorded "
+                "command when its runner is available; otherwise report this verification blocker."
+            )
+        return "verify_patch", detail + (
+            "Check the reported import, selection or configuration and run the intended tests "
+            "on this diff."
+        )
 
     def covers(self, other: "CheckEvidence") -> bool:
         if self.scope == other.scope:
@@ -64,6 +81,37 @@ def _invocation(command: str) -> tuple[str, tuple[str, ...], tuple[str, ...]] | 
     if runner == "pytest" and all(not arg.startswith("-") for arg in selectors):
         return runner, selectors, ()
     return runner, (), tuple(args)
+
+
+def _unexecuted(runner: str, obs: Observation, direct_exit: bool) -> tuple[str, str] | None:
+    """Match runner diagnostics without attributing a shell prefix's exit to pytest."""
+    output, code = obs.output, obs.exit_code
+    if re.search(r"\b[1-9]\d* (?:passed|failed|xpassed|xfailed)\b", output):
+        return None
+    if code:
+        missing = re.search(
+            rf"(?m)\b(?:No module named ['\"]?{runner}['\"]?|{runner}: (?:command )?not found)$",
+            output.rstrip(),
+        )
+        if missing:
+            return "runner_unavailable", missing.group().strip()[:400]
+    if runner == "pytest":
+        if code == 2 and "ERROR collecting" in output:
+            return "collection_error", "Test collection stopped before execution."
+        if code and "ImportError while loading conftest" in output:
+            return "test_import_error", "pytest could not import the repository's conftest."
+        missing_import = re.search(r"(?m)^ModuleNotFoundError: No module named '[\w.]+'$", output)
+        if code and missing_import and not re.search(r"\b[1-9]\d* errors?\b", output):
+            return "test_import_error", missing_import.group()[:400]
+        if direct_exit and code == 4:
+            return "invalid_test_invocation", "pytest reported a usage/configuration error."
+        if direct_exit and code == 5:
+            return "no_tests_executed", "pytest collected no selected tests."
+        if code == 0 and re.search(r"(?m)^=*\s*[1-9]\d* skipped\b", output):
+            return "no_tests_executed", "pytest reported skips without any passing tests."
+    if re.search(r"\bno tests ran\b|\bRan 0 tests\b", output):
+        return "no_tests_executed", "The runner reported zero executed tests."
+    return None
 
 
 def observe_check(
@@ -103,6 +151,7 @@ def observe_check(
         or re.search(r"(?m)^.+:\d+:\d+: [EF]\d{4}:", output)
     )
     direct = invocation is not None
+    not_started = None
     if not direct:
         # Do not parse arbitrary shell or Python. Record a conservative scoped
         # failure when a check-like command and its diagnostic agree.
@@ -117,14 +166,18 @@ def observe_check(
     else:
         assert invocation is not None
         runner, targets, options = invocation
+        not_started = _unexecuted(runner, observation, attribution == "direct_exit")
         if (
-            attribution != "direct_exit"
+            not not_started
+            and attribution != "direct_exit"
             and observation.exit_code
             and not summary
             and not diagnostic_failure
         ):
             return None
         outcome = "failed" if observation.exit_code or diagnostic_failure else "passed"
+        if not_started is not None:
+            outcome, attribution = "not_run", not_started[0]
     scope = hashlib.sha256(scope_command.strip().encode()).hexdigest()
     if direct and not scope_command.startswith("cd "):
         scope = hashlib.sha256(repr((runner, targets, options)).encode()).hexdigest()
@@ -140,10 +193,11 @@ def observe_check(
         outcome,
         observation.exit_code,
         observation.exit_code
-        if direct and not (diagnostic_failure and not observation.exit_code)
+        if direct and not not_started and not (diagnostic_failure and not observation.exit_code)
         else None,
         attribution,
         hashlib.sha256(before.encode()).hexdigest(),
         hashlib.sha256(after.encode()).hexdigest(),
         step,
+        not_started[1] if not_started else "",
     )

@@ -120,6 +120,23 @@ def test_failed_compound_output_is_a_diagnostic_and_blocks_submit() -> None:
     assert "Resources are low" in status["next_action"]
 
 
+def test_missing_runner_blocks_submit_even_after_earlier_selected_passes() -> None:
+    policy = RepairPolicy(ProgressConfig(regression_strategy=True))
+    policy.install_plan(json.dumps(plan()), "+fix")
+    while policy.queue:
+        job = policy.queue.pop(0)
+        policy.observe(job.command, Observation("1 passed", 0), "+fix", "+fix", 1, job=job)
+    assert policy.can_submit
+    target = "pytest tests/test_target.py::test_none"
+    policy.observe(target, Observation("bash: pytest: command not found", 127), "+fix", "+fix", 2)
+    policy.observe("pytest tests/test_other.py", Observation("1 passed", 0), "+fix", "+fix", 3)
+    status = policy.status(100, 10)
+    assert not policy.can_submit and not policy.unresolved
+    assert status["next_priority"] == "restore_test_environment" and target in status["next_action"]
+    policy.observe(target, Observation("1 passed", 0), "+fix", "+fix", 4)
+    assert policy.can_submit and not policy.unexecuted
+
+
 @pytest.mark.parametrize("output", ["no tests ran", "1 skipped", "1 passed"])
 def test_incomplete_observations_never_allow_submit(output: str) -> None:
     policy = RepairPolicy(ProgressConfig(regression_strategy=True))

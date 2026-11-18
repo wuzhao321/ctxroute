@@ -11,10 +11,143 @@ from ctxroute.domain import Observation, Task
 from ctxroute.models.scripted import ScriptedModel
 from ctxroute.orchestrator.engine import Engine
 from ctxroute.orchestrator.progress import ProgressTracker
+from ctxroute.orchestrator.repair_policy import RepairPolicy
 from ctxroute.orchestrator.verification import observe_check
 from ctxroute.router.rules import classify
 from ctxroute.sandbox.fake import FakeSandbox
 from ctxroute.tracing.writer import RunWriter
+
+
+@pytest.mark.parametrize(
+    ("command", "output", "code", "reason"),
+    [
+        (
+            "python -m pytest tests/a.py",
+            "/opt/env/bin/python: No module named pytest\n",
+            1,
+            "runner_unavailable",
+        ),
+        ("pytest tests/a.py", "bash: pytest: command not found\n", 127, "runner_unavailable"),
+        (
+            "python -m pytest tests/a.py",
+            "ERROR collecting tests/a.py\nImportError: missing x",
+            2,
+            "collection_error",
+        ),
+        (
+            "pytest missing.py",
+            "ERROR: file or directory not found: missing.py",
+            4,
+            "invalid_test_invocation",
+        ),
+        ("pytest tests/a.py", "no tests ran in 0.01s", 5, "no_tests_executed"),
+        ("pytest tests/a.py -k missing", "3 deselected", 5, "no_tests_executed"),
+        ("pytest tests/a.py", "1 skipped in 0.01s", 0, "no_tests_executed"),
+        (
+            "pytest tests/a.py",
+            "ModuleNotFoundError: No module named 'pluggy'",
+            1,
+            "test_import_error",
+        ),
+        ("python -m unittest", "Ran 0 tests in 0.000s\nOK", 0, "no_tests_executed"),
+    ],
+)
+def test_tests_that_did_not_start_are_neither_failed_nor_passed(
+    command: str, output: str, code: int, reason: str
+) -> None:
+    evidence = observe_check(command, Observation(output, code), "+fix", "+fix", 12)
+    assert evidence and evidence.outcome == "not_run" and evidence.attribution == reason
+    assert evidence.exit_code == code and evidence.test_exit_code is None
+    assert evidence.diagnostic
+
+
+def test_missing_runner_text_in_an_executed_failure_is_not_a_startup_error() -> None:
+    evidence = observe_check(
+        "pytest tests/a.py",
+        Observation("No module named pytest\n1 failed", 1),
+        "+fix",
+        "+fix",
+        12,
+    )
+    assert evidence and evidence.outcome == "failed" and evidence.test_exit_code == 1
+
+
+@pytest.mark.parametrize("post_edit", [False, True])
+def test_unexecuted_test_survives_reads_and_other_passes_until_scope_is_verified(
+    post_edit: bool,
+) -> None:
+    tracker = ProgressTracker(ProgressConfig(post_edit_checkpoint=post_edit))
+    tracker.observe("edit", Observation("changed", 0), "+fix", step=11)
+    tracker.observe(
+        "python -m pytest tests/a.py",
+        Observation("python: No module named pytest", 1),
+        "+fix",
+        step=12,
+    )
+    for step in (13, 14):
+        tracker.observe("cat source.py", Observation("source", 0), "+fix", step=step)
+    tracker.observe("pytest tests/b.py", Observation("1 passed", 0), "+fix", step=15)
+    guidance = tracker.status(step=16, max_steps=50, seconds_left=100, cost_left=Decimal(1))
+    assert tracker.verification == "not_run" and tracker.test_step == 12
+    assert not tracker.verified_patch
+    assert guidance["next_priority"] == "restore_test_environment"
+    assert "No module named pytest" in str(guidance["next_action"])
+    assert "tests/a.py" in str(guidance["next_action"])
+    assert "revise the patch" not in str(guidance["next_action"])
+    tracker.observe("python -m pytest tests/a.py", Observation("1 passed", 0), "+fix", step=17)
+    assert tracker.verification == "passed"
+
+
+def test_unexecuted_recheck_cannot_clear_actual_failure_or_submit_block() -> None:
+    tracker = ProgressTracker(ProgressConfig())
+    tracker.observe("edit", Observation("", 0), "+fix")
+    policy = RepairPolicy(ProgressConfig(regression_strategy=True))
+    for step, observation in enumerate(
+        [Observation("1 failed", 1), Observation("python: No module named pytest", 1)], start=2
+    ):
+        tracker.observe("python -m pytest tests/a.py", observation, "+fix", step=step)
+        policy.observe("python -m pytest tests/a.py", observation, "+fix", "+fix", step)
+    assert tracker.verification == "failed" and tracker.test_step == 2
+    assert policy.unresolved and not policy.can_submit
+
+
+def test_engine_persists_test_start_failure_separately(tmp_path: Path) -> None:
+    class MissingRunner(FakeSandbox):
+        def execute(self, handle: str, command: str, timeout: float) -> Observation:
+            super().execute(handle, command, timeout)
+            return (
+                Observation("python: No module named pytest", 1)
+                if "pytest" in command
+                else Observation("edited", 0)
+            )
+
+        def patch(self, handle: str) -> str:
+            return "+fix"
+
+    cfg = ArmConfig.load(Path(__file__).resolve().parents[1] / "configs/arms/A2.yaml")
+    model = ScriptedModel(
+        [
+            '{"tool":"bash","command":"edit"}',
+            '{"tool":"bash","command":"python -m pytest tests/a.py"}',
+            '{"tool":"submit"}',
+        ]
+    )
+    writer = RunWriter(tmp_path, "unexecuted-test", {"is_benchmark": False})
+    Engine(cfg, model, MissingRunner(), writer).run(Task("toy", "repo", "base", "fix"), 1)
+    saved = json.loads((writer.path / "state.json").read_text())
+    assert "last_failed_test" not in saved["fixed_memory"]
+    evidence = json.loads(saved["fixed_memory"]["last_test_not_run"])
+    assert evidence["check_evidence"]["outcome"] == "not_run"
+    assert saved["verification"]["local_test_status"] == "not_run"
+    prompt = model.requests[-1].messages[-1]["content"]
+    next_action = json.loads(
+        prompt.rsplit("NEXT ACTION (orchestrator guidance, not tool output)\n", 1)[1]
+    )
+    assert next_action["priority"] == "restore_test_environment"
+    assert (
+        "tests/a.py" in next_action["guidance"]
+        and "No module named pytest" in next_action["guidance"]
+    )
 
 
 def test_read_then_test_is_recorded_without_changing_routing() -> None:

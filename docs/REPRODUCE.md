@@ -32,6 +32,20 @@ schema-3 计划冻结实际任务文件、镜像表、划分、实验协议、�
 
 工具镜像与判分环境分离；构建镜像、安装依赖或下载数据由独立准备流程完成，执行入口不会自动创建云资源。源码身份和构建失败记录要求见 [BUILD_PREFLIGHT](BUILD_PREFLIGHT.md)。
 
+SymPy 的 Python 3.9 上游环境配方使用仓库的 `bin/test`，不保证安装 pytest。
+若任务允许 `python -m pytest`，准备阶段须先补齐测试工具，再冻结新镜像摘要。
+[固定依赖](../configs/environments/sympy-py39-pytest.lock)与
+[派生镜像配方](../configs/environments/sympy-py39-pytest.Dockerfile)提供该环境。
+用 `pip download --only-binary=:all: --no-deps --require-hashes -r <lock> -d <context>/wheels`
+准备 wheelhouse，将锁文件复制为构建目录的 `requirements.lock`，再使用该 Dockerfile，
+以不可变且已清理判分数据的任务镜像 ID 作为 `BASE_IMAGE`，在 `--network none` 下构建。
+构建目录只包含配方、锁文件与 wheel；不得发送整个项目或密钥。
+在隔离容器中实际运行所需公开测试，记录原始退出码、收集/运行数量及新镜像 ID。
+保留原镜像与旧计划；新环境必须进入新计划，不能替换历史冻结值或官方判分镜像。
+
+缺少测试运行器、收集失败、无测试执行与断言失败分别报告。测试无法启动不能获得
+通过证据，也不能据此指示 Agent 修改实现；只有对应范围的实际成功验证才能解除阻碍。
+
 ## 3. 显式执行推理
 
 ```sh

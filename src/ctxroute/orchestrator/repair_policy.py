@@ -52,6 +52,7 @@ class RepairPolicy:
         self.queue: list[VerificationJob] = []
         self.results: list[dict[str, Any]] = []
         self.unresolved: dict[str, CheckEvidence] = {}
+        self.unexecuted: dict[str, CheckEvidence] = {}
         self.failure_output = ""
         self.diagnostics = 0
         self.last_failure_step: int | None = None
@@ -182,6 +183,8 @@ class RepairPolicy:
             check = replace(check, targets=job.selectors, options=())
         if check is not None:
             if check.outcome == "failed":
+                if not changed:
+                    self.unexecuted.pop(check.scope, None)
                 self.unresolved[check.scope] = check
                 self.last_failure_step = step
                 self.failure_output = observation.output[-5000:]
@@ -190,10 +193,13 @@ class RepairPolicy:
                 # tests for this diff stay incomplete until the repair/retest.
                 if job is None or job.category != "target_baseline":
                     self.queue.clear()
-            elif not changed:
-                for scope, old in list(self.unresolved.items()):
-                    if check.covers(old):
-                        self.unresolved.pop(scope)
+            elif check.outcome == "not_run":
+                self.unexecuted[check.scope] = check
+            elif check.outcome == "passed" and not changed:
+                for pending in (self.unresolved, self.unexecuted):
+                    for scope, old in list(pending.items()):
+                        if check.covers(old):
+                            pending.pop(scope)
         elif self.unresolved and not changed and job is None:
             self.diagnostics += 1
         if job is not None:
@@ -273,6 +279,7 @@ class RepairPolicy:
             not self.patch.strip()
             or self.queue
             or self.unresolved
+            or self.unexecuted
             or not self.plan.get("selection_complete")
         ):
             return False
@@ -372,6 +379,9 @@ class RepairPolicy:
                         self.source.diagnostics,
                         self.config.repair_diagnostic_limit,
                     )
+        if self.unexecuted:
+            incomplete_check = max(self.unexecuted.values(), key=lambda c: c.step)
+            priority, instruction = incomplete_check.unexecuted_guidance()
         if seconds_left <= 30 or actions_left <= 1:
             instruction += (
                 " Resources are low; never declare success with missing or failed checks."
@@ -396,6 +406,8 @@ class RepairPolicy:
         }
         if self.target_contract:
             status["target_contract"] = self.target_contract.status()
+        if self.unexecuted:
+            status["unexecuted_tests"] = [c.record() for c in self.unexecuted.values()]
         if source_status is not None:
             status["source_decision"] = source_status
         if self.efficiency:

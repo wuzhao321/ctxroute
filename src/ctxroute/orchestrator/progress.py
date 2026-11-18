@@ -75,14 +75,25 @@ class ProgressTracker:
                     for old in self.checks
                     if not (
                         check.covers(old)
-                        and (check.outcome == "passed" or old.scope == check.scope)
+                        and (
+                            check.outcome == "passed"
+                            or (
+                                old.scope == check.scope
+                                and (old.outcome != "failed" or check.outcome == "failed")
+                            )
+                        )
                     )
                 ]
                 self.checks.append(check)
                 failure = next((c for c in reversed(self.checks) if c.outcome == "failed"), None)
-                effective = failure or check
+                unexecuted = next(
+                    (c for c in reversed(self.checks) if c.outcome == "not_run"), None
+                )
+                effective = failure or unexecuted or check
                 self.verification = effective.outcome
-                self.verified_patch = effective.patch_sha256_after
+                self.verified_patch = (
+                    effective.patch_sha256_after if self.verification != "not_run" else ""
+                )
                 self.test_command, self.test_step = effective.command, effective.step
         child_exit = self.reported_child_exit(command, observation)
         if patch.strip() and child_exit is not None:
@@ -313,6 +324,9 @@ class ProgressTracker:
                     " That command also changed the diff; the signal alone does not establish "
                     "whether the check ran before or after the edit. Confirm the current diff."
                 )
+        unexecuted = next((c for c in reversed(self.checks) if c.outcome == "not_run"), None)
+        if unexecuted is not None:
+            priority, next_action = unexecuted.unexecuted_guidance()
         repeat_feedback = self.repeat_feedback()
         if repeat_feedback:
             next_action = repeat_feedback + next_action
