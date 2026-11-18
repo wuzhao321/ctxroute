@@ -838,9 +838,7 @@ class Engine:
                         number,
                         decision.tier,
                         action,
-                        "Command not executed: repeated identical command, output and patch. "
-                        "Read a different relevant source location, make an informed edit, "
-                        "or submit if the patch is ready. Repeating again may stop this run.",
+                        "Command not executed. " + progress.repeat_feedback(),
                         error="repeated_action_blocked",
                     )
                     state.history.append(step)

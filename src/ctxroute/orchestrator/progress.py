@@ -17,6 +17,7 @@ class ProgressTracker:
         self.config = config
         self.patch = ""
         self.last_command = ""
+        self.last_command_step = 0
         self.last_signature: tuple[str, str, int, str] | None = None
         self.unchanged_repeats = 0
         self.blocked_repeats = 0
@@ -103,6 +104,7 @@ class ProgressTracker:
             self.unchanged_repeats + 1 if signature == self.last_signature else 1
         )
         self.last_signature, self.last_command, self.patch = signature, command, patch
+        self.last_command_step = number
         self.blocked_repeats = 0
 
     @staticmethod
@@ -183,6 +185,39 @@ class ProgressTracker:
             return True
         self.blocked_repeats = 0
         return False
+
+    def repeat_feedback(self) -> str:
+        """Describe observed repetition, without changing detection or counting an edit."""
+        if not self.blocked_repeats and self.unchanged_repeats < self.config.repeat_warn_after:
+            return ""
+        exit_code = self.last_signature[2] if self.last_signature is not None else "unknown"
+        feedback = (
+            f"The last command has the same output, exit code and diff across "
+            f"{self.unchanged_repeats} completed executions; it last executed at step "
+            f"{self.last_command_step} with exit code {exit_code}. "
+        )
+        if self.blocked_repeats:
+            remaining = max(0, self.config.max_blocked_repeats - self.blocked_repeats)
+            feedback += "The rejected proposal was NOT executed and produced no new result. "
+            feedback += (
+                f"{remaining} more consecutive blocked repeat(s) will stop this run. "
+                if remaining
+                else "The consecutive blocked-repeat limit has been reached. "
+            )
+        elif self.unchanged_repeats >= self.config.repeat_block_after:
+            feedback += "Repeating this command now will be rejected. "
+        feedback += "Use the already recorded result; do not rerun the unchanged command. "
+        if not self.patch.strip():
+            feedback += (
+                "Choose a new discriminating check or an evidence-supported implementation edit. "
+                "Changing command spelling or rewriting identical text is not progress. "
+            )
+        else:
+            feedback += (
+                "Do not change the diff just to reset repetition. "
+                "Follow the current diff's verification and submission requirements. "
+            )
+        return feedback
 
     def status(
         self, *, step: int, max_steps: int, seconds_left: float, cost_left: Decimal
@@ -278,6 +313,9 @@ class ProgressTracker:
                     " That command also changed the diff; the signal alone does not establish "
                     "whether the check ran before or after the edit. Confirm the current diff."
                 )
+        repeat_feedback = self.repeat_feedback()
+        if repeat_feedback:
+            next_action = repeat_feedback + next_action
         advice = "Investigate, edit the repository, run a focused check, then submit the patch."
         if self.unchanged_repeats >= self.config.repeat_warn_after:
             advice += (
