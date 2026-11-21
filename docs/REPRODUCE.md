@@ -2,7 +2,7 @@
 
 实验分为准备、推理、预测交接、独立判分和分析。运行前需安装锁定依赖，配置模型密钥、价格快照、预算及隔离执行环境。模型配置见 [API_SETUP](API_SETUP.md)，比较与停止规则见 [PREREG](PREREG.md)。
 
-以下命令从项目根目录执行，路径为示例；每次配置或源码变更应使用新的计划与输出目录。先准备下文所述的脱敏任务文件和固定摘要镜像表，再生成计划。候选臂配置应使用相同任务额度，并符合所选阶段的请求预留下界及余额；示例路径需替换为实际文件。
+以下命令从项目根目录执行。示例采用 A1、A2 的阶段预算模式。先按第 2 节准备脱敏任务文件和固定摘要镜像表，再将示例路径替换为实际输入。为配对臂选用相同任务额度，满足所选阶段的请求预留下界及余额。配置或源码变更后应使用新的计划与输出目录。
 
 ## 1. 冻结计划
 
@@ -21,6 +21,12 @@ schema-3 计划冻结实际任务文件、镜像表、划分、实验协议、�
 **阶段模式边界**：选择活动阶段时，每个臂必须在计划生成时通过 `--budget-lane` 绑定 `baseline`、`checkpoint` 或 `validation`。生成时只读核对整组任务额度、分配余额及最低请求预留，同时拒绝内部臂间未声明的控制变量差异。预算分配不决定实验角色，不能从臂名推断分配，也不能事后修改已冻结计划。预算模式与分配规则见 [BUDGET_SCOPES](BUDGET_SCOPES.md)。
 
 ## 2. 准备输入与镜像
+
+安装 [`data` 依赖组](DEVELOPMENT.md)后，可用准备脚本按冻结划分提取 dev 输入。`--count` 应与计划一致。
+
+```sh
+.venv/bin/python scripts/prepare_dev_tasks.py --count 1 --output data/private/tasks.jsonl
+```
 
 任务 JSONL 每行只能包含：
 
@@ -95,6 +101,18 @@ SymPy 的 Python 3.9 上游环境配方使用仓库的 `bin/test`，不保证安
 分析核对交接哈希，导入 `grade.json` 并输出 `runs.csv`、`analysis.json`、`REPORT.md`、`failure_review.csv` 和 `workflow-provenance.json`。相同报告可复用，不同报告不能覆盖已导入判分；已有分析目录不能覆盖。失败分类需要根据轨迹填写，可选绘图使用 `experiment plot`。
 
 普通 `experiment analyze` 默认严格校验内部配对条件。历史证据缺失或不一致时，可显式指定 `--allow-unverified` 输出标记为 `unverified_historical` 的描述性分析；该选项不能用于工作流的正式验收，也不能证明压缩或路由的因果效果。A0 始终标记为外部参考。
+
+## 压缩点离线回放准备
+
+[`compression_replay`](../src/ctxroute/evalkit/compression_replay.py) 从采集运行中读取前三个已接受的压缩点，检查运行身份、快照哈希及模型用量，生成配对回放输入。采集运行需包含压缩点和请求快照。控制文件提供预期运行字段 `manifest`、请求参数 `payload`、摘要模型 `summary_model`、输入上界 `input_guard_tokens`，以及可选的输入文件哈希 `input_hashes`。
+
+```sh
+.venv/bin/python -m ctxroute.evalkit.compression_replay \
+  --run results/runs/collector --controls configs/private/replay-controls.json \
+  --output results/replays/collector
+```
+
+该命令仅生成输入文件，无需模型凭据或网络请求。文件可能包含完整模型输入，应留在本地运行目录。
 
 ## Makefile
 

@@ -48,3 +48,9 @@ O = max(max_tokens, output_floor)
 通用 `experiment plan` 使用重复的 `--budget-lane ARM=LANE` 显式分配预算，使用 `--arm-config ARM=PATH` 选择候选配置。活动阶段缺少分配、单任务额度低于请求预留下界、整组额度超过阶段或分配余额时，计划生成即失败。检查包含未结算预留，且只读历史账本；执行入口仍逐请求原子预留。预留下界通过不表示实际上下文必然可负担，完整请求仍按上述字节公式检查。旧的通用任务额度可能不适合活动阶段，应选择等额的新配对配置，不能事后改写冻结计划。准备与执行边界见 [REPRODUCE](REPRODUCE.md)。
 
 `scripts/replay_stage_budget.py` 使用旧请求及结算结果在派生目录重放，检查前后旧账本哈希，不发请求、不编辑原账本。回放不能预测新输出上限下的实际 usage 或修复成功率。
+
+## 采集与回放账本接口
+
+自定义流程可通过 [`open_two_phase_ledger`](../src/ctxroute/tracing/two_phase_budget.py) 为 `collector` 和 `replay` 分别配置额度、父阶段分配和运行 scope。常规 `experiment plan` 仍使用单账本或阶段模式。
+
+两阶段账本校验父账本的固定哈希，并以只读方式查询。默认将两阶段占用计入父阶段限制。显式配置 `independent_pool` 时，单独核算两阶段占用，仍校验父账本身份及单请求预留上限。阶段各自受额度约束，失败或未结算请求会阻止继续派发。

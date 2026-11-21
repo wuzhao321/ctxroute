@@ -15,9 +15,6 @@ __pycache__/
 .ruff_cache/
 .DS_Store
 data/cache/
-results/private/
-results/budget/*.sqlite*
-results/budget/*.lock
 # Experiment outputs and development context are local artifacts.
 results/
 .local/
@@ -49,10 +46,16 @@ artifacts/demos/
 *.sqlite-wal
 *.sqlite-shm
 *.sqlite-journal
+*.sqlite3-wal
+*.sqlite3-shm
+*.sqlite3-journal
 trace.jsonl
+traces.jsonl
 requests.jsonl
+lifecycle.jsonl
 predictions.jsonl
 grade.json
+official-grade.json
 
 # Sanitized runtime inputs and environment-specific registries stay local.
 data/private/

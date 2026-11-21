@@ -38,12 +38,12 @@ flowchart TD
 | [`sandbox/`](../src/ctxroute/sandbox/) | Docker 生命周期、隔离约束、超时及输出限制 |
 | [`tracing/`](../src/ctxroute/tracing/) | 预算账本、缓存感知成本、请求与步骤记录 |
 | [`baselines/`](../src/ctxroute/baselines/) | 固定版本 mini-swe-agent 原生文本适配 |
-| [`evalkit/`](../src/ctxroute/evalkit/) | 任务划分、清单、调度、预测交接、报告导入与统计 |
+| [`evalkit/`](../src/ctxroute/evalkit/) | 任务划分、计划、调度、离线回放准备、预测交接与统计 |
 | [`configs/`](../configs/) | 实验臂、消融、运行时、沙箱和预算配置 |
 
 执行策略进一步分为三组：`verification.py` 与 `progress.py` 记录检查范围、退出码和 diff；`public_tests.py`、`target_contract.py` 与 `repair_policy.py` 处理可选公开测试选择、目标基线和提交条件；`source_decision.py`、`efficiency.py` 与 `repair_evidence.py` 提供基于已有观察的动作指引。任务专属公开脚手架在 `public_behavior.py` 注册，只覆盖已支持的任务。
 
-这些策略由实验臂的 `progress` 开关控制，新增开关默认关闭。具体依赖、停止条件和证据边界见 [PROGRESS_CONTROL](PROGRESS_CONTROL.md)。测试退出零、正常提交与独立官方判分是不同事件，不能互相替代。
+可选策略由实验臂的 `progress` 开关启用。验证记录区分测试已执行的结果和运行器缺失、收集错误等未执行状态。正常提交、公开测试结果和独立官方判分各有独立记录。配置依赖与停止条件见 [PROGRESS_CONTROL](PROGRESS_CONTROL.md)。
 
 ## 上下文与路由
 
@@ -76,7 +76,7 @@ flowchart TD
 
 任务输入仅包含 `instance_id`、`repo`、`base_commit`、`problem_statement`。任务容器固定镜像摘要，禁网、禁宿主挂载和密钥传入，并限制资源、命令时间与输出。镜像内容仍需独立审计；容器隔离本身不证明镜像没有答案泄漏。
 
-模型动作、压缩及重试共用所选预算范围，请求前预留，未知 usage 保留未结算状态。`Ledger` 提供单账本控制，`StageLedger` 增加阶段及分配检查；配置和冻结要求见 [BUDGET_SCOPES](BUDGET_SCOPES.md)。
+模型动作、压缩及重试共用所选预算范围，请求前预留额度，未知 usage 保留未结算状态。`Ledger` 管理单账本，`StageLedger` 检查阶段和分配额度。`TwoPhaseLedger` 是供自定义流程使用的采集和回放账本接口。配置见 [BUDGET_SCOPES](BUDGET_SCOPES.md)。
 
 流式传输对字节数、事件大小和总耗时设限。原始终结回执与 SDK 归一化后的用量分别校验；完整回执、SDK 接受和动作通过 schema 是独立条件，局部响应不能执行。详见 [REQUEST_RECOVERY](REQUEST_RECOVERY.md)。
 
